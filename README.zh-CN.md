@@ -82,6 +82,39 @@ npx @agegr/pi-web@latest
 - **Git worktree**：什么时候显示切换器、新建目录在哪里、删除会影响什么，见 [Pi Web 里的 Worktree](./docs/worktrees.zh-CN.md)。
 - **Fork 与会话内分支不同**：Fork 会创建新的 `.jsonl` 文件；“Edit from here” 是同一会话文件里的分支。
 
+## Skill ZIP 安装包
+
+Skills 面板支持把本地 ZIP 安装到全局作用域（`~/.pi/agent/skills`）或项目作用域（`.pi/skills`）。普通技能包可以带一层包装目录，但必须只包含一个 `SKILL.md`，且不能在技能目录外放置其他文件：
+
+```text
+my-skill.zip
+└── my-skill/
+    ├── SKILL.md
+    ├── scripts/
+    └── references/
+```
+
+需要携带运行时的安装包使用下面的通用集成格式。根目录的 `ateagent-integration.json` 声明技能和可选的 stdio MCP 服务；`SHA256SUMS.json` 必须列出压缩包内除此文件之外每个文件的 SHA-256：
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "debug-tools",
+  "version": "1.0.0",
+  "platform": "win32",
+  "arch": "x64",
+  "skill": { "name": "debugging", "path": "skill/debugging" },
+  "mcp": {
+    "serverName": "debug-server",
+    "executable": "runtime/server.exe",
+    "args": [],
+    "requiredTools": ["debug_start"]
+  }
+}
+```
+
+`platform`、`arch`、`mcp.args` 和 `mcp.env` 可省略。带 MCP 的集成包会在需要时按所选作用域安装并配置 `pi-mcp-adapter`。上传校验会拒绝危险路径、符号链接、校验和不匹配、平台或架构不兼容、包含多个技能、目标已存在、超过 50MB 的 ZIP，以及解压后超过 128MB 的内容。安装阶段不会执行上传的程序；Pi 后续可能运行包内运行时，因此请只安装可信来源的 ZIP。
+
 ## 开发
 
 ```bash
