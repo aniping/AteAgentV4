@@ -117,7 +117,7 @@ Packages that also carry a runtime use the generic integration format below. The
 }
 ```
 
-`platform`, `arch`, `mcp.args`, and `mcp.env` are optional. MCP integration installs/configures `pi-mcp-adapter` in the selected scope when needed. Upload validation rejects unsafe paths, symbolic links, checksum mismatches, unsupported platform/architecture, multiple skills, targets that already exist, archives over 50MB, and expanded contents over 128MB. Uploaded programs are not executed during installation; only install archives from trusted sources because Pi may execute their runtime later.
+`platform`, `arch`, `mcp.args`, and `mcp.env` are optional. MCP integration installs/configures `pi-mcp-adapter` in the selected scope when needed. ZIP-installed skills can be uninstalled from their detail view; uninstalling also removes that archive's integration runtime and owned MCP server entry, while retaining the shared adapter package. Upload validation rejects unsafe paths, symbolic links, checksum mismatches, unsupported platform/architecture, multiple skills, targets that already exist, archives over 50MB, and expanded contents over 128MB. Uploaded programs are not executed during installation; only install archives from trusted sources because Pi may execute their runtime later.
 
 ## Development
 

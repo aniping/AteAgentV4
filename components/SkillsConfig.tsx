@@ -84,7 +84,7 @@ function Toggle({
   );
 }
 
-function SkillDetail({
+export function SkillDetail({
   skill,
   cwd,
   onToggle,
@@ -96,6 +96,9 @@ function SkillDetail({
   updateError,
   onCheckUpdate,
   onUpdate,
+  uninstalling,
+  uninstallError,
+  onUninstall,
 }: {
   skill: Skill;
   cwd: string;
@@ -108,6 +111,9 @@ function SkillDetail({
   updateError: string | null;
   onCheckUpdate: () => void;
   onUpdate: () => void;
+  uninstalling: boolean;
+  uninstallError: string | null;
+  onUninstall: () => void;
 }) {
   const { t } = useI18n();
   const label = sourceLabel(skill);
@@ -334,6 +340,39 @@ function SkillDetail({
           {skill.description}
         </span>
       </div>
+
+      {skill.archiveInstall && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            paddingTop: 14,
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <button
+            onClick={onUninstall}
+            disabled={uninstalling}
+            style={{
+              padding: "5px 12px",
+              border: "1px solid rgba(239,68,68,0.45)",
+              borderRadius: 5,
+              background: "none",
+              color: "#ef4444",
+              cursor: uninstalling ? "not-allowed" : "pointer",
+              opacity: uninstalling ? 0.5 : 1,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {uninstalling ? t("i18n.uninstallingArchive") : t("i18n.uninstallArchive")}
+          </button>
+          {uninstallError && (
+            <span style={{ fontSize: 12, color: "#ef4444" }}>{uninstallError}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -783,9 +822,11 @@ export function AddSkillPanel({
 export function SkillsConfig({
   cwd,
   onClose,
+  onResourcesChanged,
 }: {
   cwd: string;
   onClose: () => void;
+  onResourcesChanged?: () => void;
 }) {
   const isMobile = useIsMobile();
   const { t } = useI18n();
@@ -801,6 +842,8 @@ export function SkillsConfig({
   const [checkingAll, setCheckingAll] = useState(false);
   const [updatingSkill, setUpdatingSkill] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [uninstallingArchive, setUninstallingArchive] = useState<string | null>(null);
+  const [archiveUninstallError, setArchiveUninstallError] = useState<string | null>(null);
   const [projectResourcesLoaded, setProjectResourcesLoaded] = useState(true);
 
   const loadSkills = useCallback(async () => {
@@ -952,6 +995,35 @@ export function SkillsConfig({
       });
     }
   }, []);
+
+  const uninstallArchive = useCallback(async (skill: Skill) => {
+    if (!skill.archiveInstall) return;
+    if (!window.confirm(t("i18n.uninstallArchiveConfirm", { name: skill.name }))) return;
+    setUninstallingArchive(skill.filePath);
+    setArchiveUninstallError(null);
+    try {
+      const res = await fetch("/api/skills/upload", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cwd,
+          scope: skill.archiveInstall.scope,
+          skillName: skill.name,
+        }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+      if (!res.ok || data.error || !data.success) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      setSelected(null);
+      await loadSkills();
+      onResourcesChanged?.();
+    } catch (error) {
+      setArchiveUninstallError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUninstallingArchive(null);
+    }
+  }, [cwd, loadSkills, onResourcesChanged, t]);
 
   const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
 
@@ -1304,6 +1376,7 @@ export function SkillsConfig({
                 }}
                 onInstalled={() => {
                   void loadSkills();
+                  onResourcesChanged?.();
                 }}
               />
             ) : loading ? null : selectedSkill ? (
@@ -1328,6 +1401,9 @@ export function SkillsConfig({
                 updateError={updateError}
                 onCheckUpdate={() => void checkForUpdates(selectedSkill)}
                 onUpdate={() => void updateInstalledSkill(selectedSkill)}
+                uninstalling={uninstallingArchive === selectedSkill.filePath}
+                uninstallError={archiveUninstallError}
+                onUninstall={() => void uninstallArchive(selectedSkill)}
               />
             ) : (
               <div

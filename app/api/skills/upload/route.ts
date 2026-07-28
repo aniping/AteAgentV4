@@ -8,14 +8,18 @@ import {
 import { parseFormDataWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
-import { isApiRequestAllowed } from "@/lib/request-security";
+import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 import {
   MAX_SKILL_ARCHIVE_BYTES,
   parseSkillArchive,
   SkillArchiveConflictError,
   SkillArchiveError,
 } from "@/lib/skill-archive";
-import { installSkillArchive, type SkillArchiveInstallScope } from "@/lib/skill-archive-install";
+import {
+  installSkillArchive,
+  type SkillArchiveInstallScope,
+  uninstallSkillArchive,
+} from "@/lib/skill-archive-install";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -127,6 +131,59 @@ export async function POST(request: Request) {
       },
     });
     if (scope === "project") trustProject(cwd, agentDir);
+    return NextResponse.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof SkillArchiveConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof SkillArchiveError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!isApiRequestAllowed(request)) {
+    return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
+  }
+  if (!hasJsonContentType(request)) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+
+  try {
+    const body = await request.json() as {
+      cwd?: unknown;
+      scope?: unknown;
+      skillName?: unknown;
+    };
+    const cwd = typeof body.cwd === "string" ? body.cwd.trim() : "";
+    const scope = body.scope === "global" || body.scope === "project"
+      ? body.scope as SkillArchiveInstallScope
+      : undefined;
+    const skillName = typeof body.skillName === "string" ? body.skillName : "";
+    if (!cwd || !scope || !skillName) {
+      return NextResponse.json({ error: "cwd, scope, and skillName are required" }, { status: 400 });
+    }
+    if (skillName.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skillName)) {
+      return NextResponse.json({ error: "Invalid skill name" }, { status: 400 });
+    }
+    const allowedRoots = await getAllowedFileRoots();
+    if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+    const agentDir = getAgentDir();
+    if (scope === "project" && !getProjectTrustStatus(cwd, agentDir).trusted) {
+      return NextResponse.json(
+        { error: "Project resources must be trusted before uninstalling project skills" },
+        { status: 403 },
+      );
+    }
+
+    const result = await uninstallSkillArchive(skillName, { scope, cwd, agentDir });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof SkillArchiveConflictError) {

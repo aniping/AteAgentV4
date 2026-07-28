@@ -10,6 +10,9 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
+  experimental: {
+    proxyClientMaxBodySize: 52 * 1024 * 1024,
+  },
   serverExternalPackages: [
     "undici",
     "@earendil-works/pi-coding-agent",

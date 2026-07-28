@@ -20,6 +20,13 @@ export interface SkillInstallInfo {
   canCheckForUpdates: boolean;
 }
 
+export interface SkillArchiveInstallInfo {
+  kind: "skill" | "integration";
+  scope: SkillInstallScope;
+  integrationId?: string;
+  mcpServer?: string;
+}
+
 export type SkillUpdateState =
   | "up-to-date"
   | "update-available"
@@ -46,6 +53,7 @@ export interface SkillInfo {
     scope?: string;
   };
   install?: SkillInstallInfo;
+  archiveInstall?: SkillArchiveInstallInfo;
 }
 
 export interface SkillsResponse {

@@ -1525,7 +1525,11 @@ export function AppShell() {
       />
     )}
     {skillsConfigOpen && projectTrustCwd && (
-      <SkillsConfig cwd={projectTrustCwd} onClose={() => setSkillsConfigOpen(false)} />
+      <SkillsConfig
+        cwd={projectTrustCwd}
+        onClose={() => setSkillsConfigOpen(false)}
+        onResourcesChanged={() => setSessionKey((key) => key + 1)}
+      />
     )}
     {pluginsConfigOpen && projectTrustCwd && (
       <PluginsConfig
