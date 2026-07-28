@@ -209,6 +209,7 @@ export const zhCNLocale: LocalePlugin = {
     "chat.compactContext": "压缩上下文",
     "chat.compacting": "正在压缩…",
     "chat.compact": "压缩",
+    "chat.compactSessionTooSmall": "目前没有足够的旧上下文可压缩。继续对话后再试。",
     "chat.stopAgent": "停止 Agent",
     "chat.stop": "停止",
     "chat.disableSound": "关闭完成提示音",
