@@ -280,7 +280,7 @@ function SegmentedScope({
   );
 }
 
-function AddPluginPanel({
+export function AddPluginPanel({
   cwd,
   source,
   scope,
@@ -322,7 +322,7 @@ function AddPluginPanel({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         <label htmlFor="plugin-source" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
-          Source
+          {t("i18n.pluginSource")}
         </label>
         <input
           id="plugin-source"
@@ -371,7 +371,7 @@ function AddPluginPanel({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
-          Examples
+          {t("i18n.examples")}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {examples.map((example) => (
@@ -405,6 +405,19 @@ function AddPluginPanel({
             </button>
           ))}
         </div>
+      </div>
+
+      <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.8 }}>
+        {t("i18n.pluginCatalogBefore")}
+        <a
+          href="https://pi.dev/packages?type=extension"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "var(--accent)", textDecoration: "none" }}
+        >
+          pi.dev/packages
+        </a>
+        {t("i18n.pluginCatalogAfter")}
       </div>
 
       {actionError && (

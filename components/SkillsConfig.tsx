@@ -338,7 +338,7 @@ function SkillDetail({
   );
 }
 
-function AddSkillPanel({
+export function AddSkillPanel({
   cwd,
   installedPackages,
   projectResourcesLoaded,
@@ -386,13 +386,13 @@ function AddSkillPanel({
         return;
       }
       setResults(d.results ?? []);
-      if ((d.results ?? []).length === 0) setSearchError("No skills found");
+      if ((d.results ?? []).length === 0) setSearchError(t("i18n.noSkills"));
     } catch (e) {
       setSearchError(String(e));
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [t]);
 
   const install = useCallback(
     async (pkg: string) => {
@@ -664,16 +664,16 @@ function AddSkillPanel({
           <div
             style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.8 }}
           >
-            Search{" "}
+            {t("i18n.skillCatalogBefore")}
             <a
-              href="https://skills.sh"
+              href="https://skills.sh/"
               target="_blank"
               rel="noreferrer"
               style={{ color: "var(--accent)", textDecoration: "none" }}
             >
               skills.sh
-            </a>{" "}
-            to discover and install skills for your agent.
+            </a>
+            {t("i18n.skillCatalogAfter")}
           </div>
         )
       )}
