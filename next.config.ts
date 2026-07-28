@@ -11,7 +11,12 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
-  ...(standaloneBuild ? { output: "standalone" as const } : {}),
+  ...(standaloneBuild ? {
+    output: "standalone" as const,
+    outputFileTracingIncludes: {
+      "/*": ["./node_modules/@earendil-works/pi-coding-agent/dist/**/*"],
+    },
+  } : {}),
   experimental: {
     proxyClientMaxBodySize: 52 * 1024 * 1024,
   },
