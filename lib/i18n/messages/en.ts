@@ -209,6 +209,7 @@ export const enLocale: LocalePlugin = {
     "chat.compactContext": "Compact context",
     "chat.compacting": "Compacting…",
     "chat.compact": "Compact",
+    "chat.compactSessionTooSmall": "There is not enough older context to compact yet. Continue the conversation and try again.",
     "chat.stopAgent": "Stop agent",
     "chat.stop": "Stop",
     "chat.disableSound": "Disable completion sound",

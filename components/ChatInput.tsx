@@ -976,6 +976,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const compactResultText = compactResult
     ? `${compactResult.reason && compactResult.reason !== "manual" ? `${compactResult.reason[0].toUpperCase()}${compactResult.reason.slice(1)} ` : t("chat.compacted")} ${formatTokenCount(compactResult.tokensBefore)} -> ${formatTokenCount(compactResult.estimatedTokensAfter)} tokens (${t("chat.tokensSaved", { saved: formatTokenCount(compactSavedTokens) })})`
     : null;
+  const compactErrorText = compactError?.trim().replace(/^Error:\s*/, "") === "Nothing to compact (session too small)"
+    ? t("chat.compactSessionTooSmall")
+    : compactError;
   const thinkingDisplayLabel = (() => {
     const lvl = thinkingLevel ?? "auto";
     if (lvl === "auto" || !thinkingLevelMap) return lvl;
@@ -1851,6 +1854,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               display: isMobile ? (controlsMenuOpen ? "flex" : "none") : "flex",
               alignItems: "center",
               gap: isMobile ? 1 : 2,
+              position: "relative",
               ...(isMobile ? {
                 position: "absolute",
                 right: 0,
@@ -1868,6 +1872,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 backdropFilter: "blur(10px)",
               } : null),
             }}>
+            {!isStreaming && onCompact && compactErrorText && (
+              <div role="alert" style={{
+                position: "absolute", bottom: "calc(100% + 6px)", right: 0,
+                background: "#1f2937", color: "#f87171",
+                fontSize: 11, padding: "4px 8px", borderRadius: 5,
+                width: "max-content", maxWidth: isMobile ? "100%" : 360,
+                lineHeight: 1.4, whiteSpace: "normal", pointerEvents: "none",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 50,
+              }}>
+                {compactErrorText}
+              </div>
+            )}
             {!isStreaming && onThinkingLevelChange && (
               <div ref={thinkingDropdownRef} style={{ position: "relative" }}>
                 <button
@@ -2034,17 +2050,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
 
             {!isStreaming && onCompact && (
               <div style={{ position: "relative" }}>
-                {compactError && (
-                  <div style={{
-                    position: "absolute", bottom: "calc(100% + 6px)", right: 0,
-                    background: "#1f2937", color: "#f87171",
-                    fontSize: 11, padding: "4px 8px", borderRadius: 5,
-                    whiteSpace: "nowrap", pointerEvents: "none",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 50,
-                  }}>
-                    {compactError}
-                  </div>
-                )}
                 <button
                   onClick={isCompacting ? onAbortCompaction : onCompact}
                   disabled={isStreaming && !isCompacting}
