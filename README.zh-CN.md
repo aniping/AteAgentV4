@@ -84,6 +84,8 @@ npx @agegr/pi-web@latest
 
 ## Skill ZIP 安装包
 
+完整的目录规范、清单字段、PowerShell 7 打包模板、校验流程和升级方式，见 [Skill 与集成 ZIP 制作指南](./docs/skill-packages.zh-CN.md)。
+
 Skills 面板支持把本地 ZIP 安装到全局作用域（`~/.pi/agent/skills`）或项目作用域（`.pi/skills`）。普通技能包可以带一层包装目录，但必须只包含一个 `SKILL.md`，且不能在技能目录外放置其他文件：
 
 ```text
