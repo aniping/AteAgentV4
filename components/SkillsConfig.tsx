@@ -356,11 +356,15 @@ export function AddSkillPanel({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [newlyInstalledPkgs, setNewlyInstalledPkgs] = useState<Set<string>>(
     new Set(),
   );
   const [scope, setScope] = useState<"global" | "project">("global");
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -421,6 +425,40 @@ export function AddSkillPanel({
     },
     [onInstalled, scope, cwd],
   );
+
+  const uploadArchive = useCallback(async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    setInstallError(null);
+    setUploadMessage(null);
+    try {
+      const form = new FormData();
+      form.set("file", uploadFile);
+      form.set("scope", scope);
+      form.set("cwd", cwd);
+      const res = await fetch("/api/skills/upload", { method: "POST", body: form });
+      const data = await res.json() as {
+        error?: string;
+        skillName?: string;
+        kind?: "skill" | "integration";
+      };
+      if (!res.ok || data.error) {
+        setInstallError(data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setUploadMessage(t(
+        data.kind === "integration" ? "i18n.skillIntegrationInstalled" : "i18n.skillZipInstalled",
+        { name: data.skillName ?? uploadFile.name },
+      ));
+      setUploadFile(null);
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      onInstalled();
+    } catch (error) {
+      setInstallError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUploading(false);
+    }
+  }, [cwd, onInstalled, scope, t, uploadFile]);
 
   const installPath =
     scope === "global"
@@ -532,6 +570,64 @@ export function AddSkillPanel({
           </span>
         </div>
 
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid var(--border)",
+            borderRadius: 7,
+            background: "var(--bg-panel)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+            {t("i18n.installFromZip")}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              disabled={uploading}
+              onChange={(event) => {
+                setUploadFile(event.target.files?.[0] ?? null);
+                setInstallError(null);
+                setUploadMessage(null);
+              }}
+              style={{
+                minWidth: 0,
+                flex: 1,
+                fontSize: 12,
+                color: "var(--text-muted)",
+              }}
+            />
+            <button
+              onClick={uploadArchive}
+              disabled={!uploadFile || uploading || installing !== null}
+              style={{
+                padding: "6px 13px",
+                border: "none",
+                borderRadius: 5,
+                background: "var(--accent)",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: !uploadFile || uploading || installing !== null ? "not-allowed" : "pointer",
+                opacity: !uploadFile || uploading || installing !== null ? 0.5 : 1,
+              }}
+            >
+              {uploading ? t("i18n.uploadingSkillZip") : t("i18n.installZip")}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.55 }}>
+            {t("i18n.skillZipHint")}
+          </div>
+          <div style={{ fontSize: 11, color: "#d97706", lineHeight: 1.55 }}>
+            {t("i18n.skillZipTrustWarning")}
+          </div>
+        </div>
+
         {/* Errors */}
         {searchError && (
           <div style={{ fontSize: 12, color: "#f87171" }}>{searchError}</div>
@@ -542,6 +638,9 @@ export function AddSkillPanel({
           >
             {installError}
           </div>
+        )}
+        {uploadMessage && (
+          <div style={{ fontSize: 12, color: "#16a34a" }}>{uploadMessage}</div>
         )}
       </div>
 

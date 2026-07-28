@@ -86,6 +86,39 @@ npx @agegr/pi-web@latest
 - **Forks vs in-session branches**: Fork creates a new `.jsonl` file. "Edit from here" creates another branch inside the same session file.
 - **Internationalization**: see [Internationalization](./docs/i18n.md) for using translations and adding languages or UI text.
 
+## Skill ZIP Packages
+
+The Skills panel can install a local ZIP into the global (`~/.pi/agent/skills`) or project (`.pi/skills`) scope. A portable skill ZIP may use a wrapper directory, but it must contain exactly one `SKILL.md` and no files outside that skill directory:
+
+```text
+my-skill.zip
+└── my-skill/
+    ├── SKILL.md
+    ├── scripts/
+    └── references/
+```
+
+Packages that also carry a runtime use the generic integration format below. The root `ateagent-integration.json` declares the skill and an optional stdio MCP server; `SHA256SUMS.json` must list the SHA-256 digest of every other file in the archive.
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "debug-tools",
+  "version": "1.0.0",
+  "platform": "win32",
+  "arch": "x64",
+  "skill": { "name": "debugging", "path": "skill/debugging" },
+  "mcp": {
+    "serverName": "debug-server",
+    "executable": "runtime/server.exe",
+    "args": [],
+    "requiredTools": ["debug_start"]
+  }
+}
+```
+
+`platform`, `arch`, `mcp.args`, and `mcp.env` are optional. MCP integration installs/configures `pi-mcp-adapter` in the selected scope when needed. Upload validation rejects unsafe paths, symbolic links, checksum mismatches, unsupported platform/architecture, multiple skills, targets that already exist, archives over 50MB, and expanded contents over 128MB. Uploaded programs are not executed during installation; only install archives from trusted sources because Pi may execute their runtime later.
+
 ## Development
 
 ```bash

@@ -27,6 +27,19 @@ test("skill installation links to the skills.sh catalog", () => {
   assert.match(html, /Search <a href="https:\/\/skills\.sh\/" target="_blank" rel="noreferrer"[^>]*>skills\.sh<\/a> to discover and install skills/);
 });
 
+test("skill installation offers a generic ZIP upload", () => {
+  const html = withI18n(React.createElement(AddSkillPanel, {
+    cwd: "C:/project",
+    installedPackages: { global: new Set(), project: new Set() },
+    projectResourcesLoaded: true,
+    onInstalled() {},
+  }));
+
+  assert.match(html, /Install from ZIP/);
+  assert.match(html, /<input[^>]+type="file"[^>]+accept="\.zip,application\/zip"/);
+  assert.match(html, /exactly one SKILL\.md/);
+});
+
 test("plugin installation links to the filtered Pi extension catalog", () => {
   const html = withI18n(React.createElement(AddPluginPanel, {
     cwd: "C:/project",
