@@ -180,7 +180,14 @@ try {
         'runtime/node_modules/npm/bin/npx-cli.js',
         'runtime/NODE-LICENSE.txt',
         'app/server.js',
-        'app/.next/BUILD_ID'
+        'app/.next/BUILD_ID',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/dark.json',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/light.json',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.json',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/template.html',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/template.css',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/vendor/marked.min.js',
+        'app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/assets/clankolas.png'
     )) {
         if ($entries -notcontains "$prefix$required") {
             throw "Portable package entry is missing: $required"
