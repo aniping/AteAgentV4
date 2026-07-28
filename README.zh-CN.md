@@ -42,6 +42,12 @@ PI_WEB_NO_OPEN=1 pi-web         # 适用于后台服务或开机自启
 Pi Web 没有应用层身份验证，并且可以调用高权限智能体。请勿将其暴露到互联网；仅在可信网络中使用非 loopback 监听地址。
 API 请求仅接受 loopback 名称、IP 字面量、当前监听主机名，以及 `PI_WEB_ALLOWED_HOSTS` 中以逗号分隔的精确主机名。可信反向代理使用不同的外部主机名时，请配置该变量。
 
+### Windows 便携发布包
+
+在 Windows x64 或 arm64 上运行 `npm run package`，会在 `build/release/` 生成同架构的便携 ZIP。产物包含生产版应用，以及经过官方 SHA-256 校验、带 npm/npx 的完整 Node.js 发行目录，目标电脑无需另外安装 Node.js。
+
+解压后双击 `start.cmd`。便携包默认监听 `0.0.0.0:30141`，同一可信局域网中的其他电脑可打开 `http://<运行电脑的局域网 IP>:30141`。需要仅限本机时运行 `start.cmd -H 127.0.0.1`；自定义端口可使用 `start.cmd -p 8080`。Windows 防火墙可能需要允许所选端口入站访问。
+
 ## HTTP 代理
 
 Pi Web 的服务端模型请求和 API 请求会读取标准的 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY` 环境变量。

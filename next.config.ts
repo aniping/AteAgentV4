@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const { version } = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")) as { version: string };
+const standaloneBuild = process.env.PI_WEB_STANDALONE === "1";
 let piVersion = "unknown";
 try {
   const piPkgPath = join(__dirname, "node_modules/@earendil-works/pi-coding-agent/package.json");
@@ -10,6 +11,7 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
+  ...(standaloneBuild ? { output: "standalone" as const } : {}),
   experimental: {
     proxyClientMaxBodySize: 52 * 1024 * 1024,
   },

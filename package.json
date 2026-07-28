@@ -33,6 +33,7 @@
     "build": "next build --webpack",
     "start": "next start -H 127.0.0.1 -p 30141",
     "start:lan": "next start -H 0.0.0.0 -p 30141",
+    "package": "pwsh -NoProfile -File ./scripts/package-portable.ps1",
     "lint": "eslint .",
     "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public"
   },

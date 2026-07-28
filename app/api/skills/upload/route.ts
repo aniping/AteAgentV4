@@ -3,12 +3,12 @@ import {
   DefaultPackageManager,
   getAgentDir,
   SettingsManager,
-  type ResolvedResource,
 } from "@earendil-works/pi-coding-agent";
 import { parseFormDataWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
+import { hasUsableMcpAdapter, isMcpAdapterSource, MCP_ADAPTER_SOURCE } from "@/lib/mcp-adapter";
 import {
   MAX_SKILL_ARCHIVE_BYTES,
   parseSkillArchive,
@@ -25,27 +25,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_UPLOAD_REQUEST_BYTES = MAX_SKILL_ARCHIVE_BYTES + 2 * 1024 * 1024;
-const MCP_ADAPTER_SOURCE = "npm:pi-mcp-adapter";
-
 function isMultipartRequest(request: Request): boolean {
   return request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() === "multipart/form-data";
-}
-
-function isMcpAdapterSource(source: string): boolean {
-  return source === MCP_ADAPTER_SOURCE || source.startsWith(`${MCP_ADAPTER_SOURCE}@`);
-}
-
-export function hasUsableMcpAdapter(
-  extensions: readonly ResolvedResource[],
-  installScope: SkillArchiveInstallScope,
-): boolean {
-  return extensions.some((extension) => {
-    const { metadata } = extension;
-    if (!extension.enabled || metadata.origin !== "package" || !isMcpAdapterSource(metadata.source)) {
-      return false;
-    }
-    return metadata.scope === "user" || (installScope === "project" && metadata.scope === "project");
-  });
 }
 
 export async function POST(request: Request) {

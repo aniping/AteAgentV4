@@ -44,6 +44,12 @@ PI_WEB_NO_OPEN=1 pi-web         # useful when running as a background service
 Pi Web has no application-level authentication and can invoke a high-privilege agent. Do not expose it to the internet; only use non-loopback bindings on a trusted network.
 API requests accept loopback names, IP literals, the selected bind hostname, and exact comma-separated names in `PI_WEB_ALLOWED_HOSTS`. Configure that variable when a trusted reverse proxy uses a different external hostname.
 
+### Windows portable release package
+
+Run `npm run package` on Windows x64 or arm64 to create a same-architecture portable ZIP under `build/release/`. It contains the production application and an official SHA-256-verified Node.js distribution with npm/npx, so the target computer does not need Node.js installed.
+
+Extract the ZIP and double-click `start.cmd`. The portable package listens on `0.0.0.0:30141` by default, so another computer on the same trusted LAN can open `http://<host-LAN-IP>:30141`. Use `start.cmd -H 127.0.0.1` for local-only access or `start.cmd -p 8080` to change the port. Windows Firewall may need an inbound rule for the selected port.
+
 ## HTTP Proxy
 
 Pi Web reads the standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables for server-side model and API requests.
