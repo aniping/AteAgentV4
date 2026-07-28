@@ -1,8 +1,9 @@
 # Release Checklist
 
-This repo publishes two artifacts for each release:
+This repo publishes these artifacts for each release:
 
 - npm package: `@agegr/pi-web`
+- Windows portable ZIP with an embedded Node.js runtime
 - GitHub Release: `agegr/pi-web`
 
 Use this checklist from a clean `main` checkout.
@@ -46,7 +47,26 @@ npm view @agegr/pi-web@<version> version --registry https://registry.npmjs.org/
 npm view @agegr/pi-web versions --json --registry https://registry.npmjs.org/
 ```
 
-## 3. Commit the Version Bump
+## 3. Generate the Windows Portable Package
+
+Run this after `npm run release` so the ZIP uses the newly bumped package version. Stop any local dev server first because the production build replaces `.next/`, then run:
+
+```powershell
+npm run package
+```
+
+The command creates `build/release/pi-web-<version>-win-<arch>.zip`. It uses Next.js standalone output and downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
+
+Extract the ZIP and verify both listener modes before publishing the GitHub release:
+
+```powershell
+.\start.cmd -H 127.0.0.1 -p 30141
+.\start.cmd -H 0.0.0.0 -p 30141
+```
+
+The second form allows another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`. Never expose the service directly to the internet because it has no application-level authentication.
+
+## 4. Commit the Version Bump
 
 Replace `<version>` with the new package version, for example `0.7.5`.
 
@@ -56,7 +76,7 @@ git add package.json package-lock.json
 git commit -m "Release v<version>"
 ```
 
-## 4. Tag and Push
+## 5. Tag and Push
 
 ```bash
 git tag -a v<version> -m "v<version>"
@@ -70,7 +90,7 @@ git ls-remote --tags origin v<version>
 gh release view v<version> --repo agegr/pi-web
 ```
 
-## 5. Generate Release Notes from Commits
+## 6. Generate Release Notes from Commits
 
 Use the previous release tag as the base.
 
@@ -126,7 +146,7 @@ Prepared from commits in `v<previous>..v<version>`.
 - Published npm package `@agegr/pi-web@<version>`.
 ```
 
-## 6. Create or Update the GitHub Release
+## 7. Create or Update the GitHub Release
 
 Create a new release:
 
@@ -135,7 +155,8 @@ gh release create v<version> \
   --repo agegr/pi-web \
   --verify-tag \
   --title "v<version>" \
-  --notes-file release-notes.md
+  --notes-file release-notes.md \
+  "build/release/pi-web-<version>-win-<arch>.zip"
 ```
 
 If the release already exists and only the notes need updating:
@@ -160,10 +181,20 @@ gh release edit v<version> --repo agegr/pi-web --notes-file - <<'EOF'
 EOF
 ```
 
-## 7. Final Verification
+Upload or replace the portable package on an existing release with:
+
+```bash
+gh release upload v<version> \
+  --repo agegr/pi-web \
+  --clobber \
+  "build/release/pi-web-<version>-win-<arch>.zip"
+```
+
+## 8. Final Verification
 
 ```bash
 gh release view v<version> --repo agegr/pi-web
+gh release view v<version> --repo agegr/pi-web --json assets
 npm view @agegr/pi-web@<version> version --registry https://registry.npmjs.org/
 git status --short --branch
 git log --oneline --decorate -3

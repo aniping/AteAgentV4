@@ -27,7 +27,7 @@ test("skill ZIP upload rejects a malformed archive without writing it", async ()
 });
 
 test("MCP adapter reuse follows Pi's resolved extension state", async () => {
-  const { hasUsableMcpAdapter } = await jiti.import("./route.ts");
+  const { hasUsableMcpAdapter } = await jiti.import("@/lib/mcp-adapter");
   const resource = (scope, enabled = true) => ({
     path: "C:/packages/pi-mcp-adapter/extensions/index.js",
     enabled,
