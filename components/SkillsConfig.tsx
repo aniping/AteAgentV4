@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useI18n } from "@/hooks/useI18n";
+import { ConfigAddButton } from "@/components/ConfigAddButton";
 import type {
   SkillInfo as Skill,
   SkillInstallScope,
@@ -10,6 +11,7 @@ import type {
   SkillsResponse,
   SkillUpdateResult,
 } from "@/lib/api-types";
+import { MAX_SKILL_ARCHIVE_LABEL } from "@/lib/skill-archive-limits";
 
 function shortenPath(p: string): string {
   // Match common home dir patterns: /Users/xxx, /home/xxx
@@ -32,6 +34,12 @@ function updateKey(skill: Skill): string | null {
 
 function shortVersion(version?: string): string {
   return version ? version.slice(0, 8) : "unknown";
+}
+
+function formatArchiveSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function Toggle({
@@ -398,12 +406,15 @@ export function AddSkillPanel({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadDragActive, setUploadDragActive] = useState(false);
   const [newlyInstalledPkgs, setNewlyInstalledPkgs] = useState<Set<string>>(
     new Set(),
   );
   const [scope, setScope] = useState<"global" | "project">("global");
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadDragCounterRef = useRef(0);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -468,7 +479,7 @@ export function AddSkillPanel({
   const uploadArchive = useCallback(async () => {
     if (!uploadFile) return;
     setUploading(true);
-    setInstallError(null);
+    setUploadError(null);
     setUploadMessage(null);
     try {
       const form = new FormData();
@@ -482,7 +493,7 @@ export function AddSkillPanel({
         kind?: "skill" | "integration";
       };
       if (!res.ok || data.error) {
-        setInstallError(data.error ?? `HTTP ${res.status}`);
+        setUploadError(data.error ?? `HTTP ${res.status}`);
         return;
       }
       setUploadMessage(t(
@@ -493,11 +504,57 @@ export function AddSkillPanel({
       if (uploadInputRef.current) uploadInputRef.current.value = "";
       onInstalled();
     } catch (error) {
-      setInstallError(error instanceof Error ? error.message : String(error));
+      setUploadError(error instanceof Error ? error.message : String(error));
     } finally {
       setUploading(false);
     }
   }, [cwd, onInstalled, scope, t, uploadFile]);
+
+  const selectUploadFile = useCallback((file: File | null) => {
+    setUploadMessage(null);
+    setUploadError(null);
+    if (file && !file.name.toLowerCase().endsWith(".zip")) {
+      setUploadFile(null);
+      setUploadError(t("i18n.skillZipOnly"));
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      return;
+    }
+    setUploadFile(file);
+  }, [t]);
+
+  const handleUploadDragEnter = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+    if (uploading) return;
+    event.preventDefault();
+    uploadDragCounterRef.current += 1;
+    setUploadDragActive(true);
+  }, [uploading]);
+
+  const handleUploadDragOver = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+    if (uploading) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, [uploading]);
+
+  const handleUploadDragLeave = useCallback(() => {
+    uploadDragCounterRef.current = Math.max(0, uploadDragCounterRef.current - 1);
+    if (uploadDragCounterRef.current === 0) setUploadDragActive(false);
+  }, []);
+
+  const handleUploadDrop = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    uploadDragCounterRef.current = 0;
+    setUploadDragActive(false);
+    if (uploading) return;
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length !== 1) {
+      setUploadFile(null);
+      setUploadMessage(null);
+      setUploadError(t("i18n.skillZipSingle"));
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      return;
+    }
+    selectUploadFile(files[0]);
+  }, [selectUploadFile, t, uploading]);
 
   const installPath =
     scope === "global"
@@ -611,54 +668,230 @@ export function AddSkillPanel({
 
         <div
           style={{
-            padding: 12,
+            padding: 14,
             border: "1px solid var(--border)",
-            borderRadius: 7,
+            borderRadius: 9,
             background: "var(--bg-panel)",
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 10,
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-            {t("i18n.installFromZip")}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input
-              ref={uploadInputRef}
-              type="file"
-              accept=".zip,application/zip"
-              disabled={uploading}
-              onChange={(event) => {
-                setUploadFile(event.target.files?.[0] ?? null);
-                setInstallError(null);
-                setUploadMessage(null);
-              }}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span
+              aria-hidden="true"
               style={{
-                minWidth: 0,
-                flex: 1,
-                fontSize: 12,
-                color: "var(--text-muted)",
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "rgba(99,102,241,0.12)",
+                color: "var(--accent)",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
               }}
-            />
+            >
+              ZIP
+            </span>
+            <div style={{ fontSize: 13, fontWeight: 650, color: "var(--text)" }}>
+              {t("i18n.installFromZip")}
+            </div>
+          </div>
+
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            disabled={uploading}
+            onChange={(event) => selectUploadFile(event.target.files?.[0] ?? null)}
+            hidden
+          />
+          <button
+            type="button"
+            onClick={() => uploadInputRef.current?.click()}
+            onDragEnter={handleUploadDragEnter}
+            onDragOver={handleUploadDragOver}
+            onDragLeave={handleUploadDragLeave}
+            onDrop={handleUploadDrop}
+            disabled={uploading}
+            aria-label={uploadFile ? `${t("i18n.replaceSkillZip")}: ${uploadFile.name}` : t("i18n.chooseSkillZip")}
+            style={{
+              width: "100%",
+              minHeight: 88,
+              padding: "14px 16px",
+              border: uploadDragActive
+                ? "1.5px solid var(--accent)"
+                : uploadFile
+                  ? "1px solid rgba(99,102,241,0.5)"
+                  : "1px dashed var(--border)",
+              borderRadius: 8,
+              background: uploadDragActive
+                ? "rgba(99,102,241,0.12)"
+                : uploadFile
+                  ? "rgba(99,102,241,0.06)"
+                  : "var(--bg)",
+              color: "var(--text)",
+              cursor: uploading ? "wait" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: uploadFile ? "flex-start" : "center",
+              gap: 12,
+              textAlign: "left",
+              transition: "border-color 0.15s, background 0.15s, transform 0.15s",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: uploadFile || uploadDragActive
+                  ? "rgba(99,102,241,0.14)"
+                  : "var(--bg-hover)",
+                color: uploadFile || uploadDragActive ? "var(--accent)" : "var(--text-muted)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              {uploadFile ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2h9l4 4v16H6z" />
+                  <path d="M14 2v5h5M9 13h6M9 17h6" />
+                </svg>
+              ) : (
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" />
+                  <path d="M5 13v6h14v-6" />
+                </svg>
+              )}
+            </span>
+
+            {uploadFile ? (
+              <>
+                <span style={{ flex: 1, minWidth: 0 }} aria-live="polite">
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {uploadFile.name}
+                  </span>
+                  <span style={{ display: "block", marginTop: 3, fontSize: 11, color: "var(--text-dim)" }}>
+                    {t("i18n.skillZipSelected", { size: formatArchiveSize(uploadFile.size) })}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    flexShrink: 0,
+                    padding: "4px 8px",
+                    borderRadius: 5,
+                    background: "var(--bg-hover)",
+                    color: "var(--text-muted)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {t("i18n.replaceSkillZip")}
+                </span>
+              </>
+            ) : (
+              <span>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                  {t("i18n.chooseSkillZip")}
+                </span>
+                <span style={{ display: "block", marginTop: 3, fontSize: 11, color: "var(--text-dim)", textAlign: "center" }}>
+                  {t("i18n.dropSkillZip")}
+                </span>
+              </span>
+            )}
+          </button>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+              {t("i18n.skillZipFileRules", { size: MAX_SKILL_ARCHIVE_LABEL })}
+            </span>
             <button
+              type="button"
               onClick={uploadArchive}
               disabled={!uploadFile || uploading || installing !== null}
               style={{
-                padding: "6px 13px",
+                minWidth: 126,
+                padding: "7px 14px",
                 border: "none",
-                borderRadius: 5,
+                borderRadius: 6,
                 background: "var(--accent)",
                 color: "#fff",
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: !uploadFile || uploading || installing !== null ? "not-allowed" : "pointer",
                 opacity: !uploadFile || uploading || installing !== null ? 0.5 : 1,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
               }}
             >
-              {uploading ? t("i18n.uploadingSkillZip") : t("i18n.installZip")}
+              {uploading && (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }} aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+                </svg>
+              )}
+              {uploading
+                ? t("i18n.uploadingSkillZip")
+                : uploadFile
+                  ? t("i18n.installZip")
+                  : t("i18n.selectZipBeforeInstall")}
             </button>
           </div>
+
+          {uploadError && (
+            <div
+              role="alert"
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 7,
+                padding: "7px 9px",
+                borderRadius: 6,
+                background: "rgba(239,68,68,0.08)",
+                color: "#ef4444",
+                fontSize: 11,
+                lineHeight: 1.5,
+                wordBreak: "break-word",
+              }}
+            >
+              <span aria-hidden="true">!</span>
+              <span>{uploadError}</span>
+            </div>
+          )}
+          {uploadMessage && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 7,
+                padding: "7px 9px",
+                borderRadius: 6,
+                background: "rgba(34,197,94,0.09)",
+                color: "#16a34a",
+                fontSize: 11,
+                lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true">✓</span>
+              <span>{uploadMessage}</span>
+            </div>
+          )}
+
           <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.55 }}>
             {t("i18n.skillZipHint")}
           </div>
@@ -677,9 +910,6 @@ export function AddSkillPanel({
           >
             {installError}
           </div>
-        )}
-        {uploadMessage && (
-          <div style={{ fontSize: 12, color: "#16a34a" }}>{uploadMessage}</div>
         )}
       </div>
 
@@ -856,7 +1086,11 @@ export function SkillsConfig({
       const list = d.skills ?? [];
       setSkills(list);
       setProjectResourcesLoaded(d.projectResourcesLoaded ?? true);
-      if (list.length > 0 && !selected) setSelected(list[0].filePath);
+      setSelected((current) => {
+        if (current && list.some((skill) => skill.filePath === current)) return current;
+        return list[0]?.filePath ?? null;
+      });
+      if (list.length === 0) setAddMode(true);
       return list;
     } catch (e) {
       setError(String(e));
@@ -864,7 +1098,7 @@ export function SkillsConfig({
     } finally {
       setLoading(false);
     }
-  }, [cwd, selected]);
+  }, [cwd]);
 
   useEffect(() => {
     setUpdateStatuses({});
@@ -1134,6 +1368,14 @@ export function SkillsConfig({
               background: "var(--bg-panel)",
             }}
           >
+            <ConfigAddButton
+              active={addMode}
+              label={t("i18n.addSkill")}
+              onClick={() => {
+                setSelected(null);
+                setAddMode(true);
+              }}
+            />
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }}>
               {loading ? (
                 <div
@@ -1308,51 +1550,6 @@ export function SkillsConfig({
                   );
                 })()
               )}
-            </div>
-            {/* Add skill button */}
-            <div
-              style={{
-                padding: "8px 6px",
-                borderTop: "1px solid var(--border)",
-                flexShrink: 0,
-              }}
-            >
-              <div
-                onClick={() => setAddMode(true)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "7px 8px",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                  background: addMode ? "var(--bg-selected)" : "none",
-                  color: addMode ? "var(--accent)" : "var(--text-dim)",
-                  fontSize: 12,
-                }}
-                onMouseEnter={(e) => {
-                  if (!addMode)
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!addMode) e.currentTarget.style.background = "none";
-                }}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                 {t("i18n.addSkill")}
-              </div>
             </div>
           </div>
 

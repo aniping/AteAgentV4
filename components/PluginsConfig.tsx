@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { ConfigAddButton } from "@/components/ConfigAddButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { PluginPackageInfo, PluginsResponse } from "@/lib/api-types";
 import { useI18n } from "@/hooks/useI18n";
@@ -826,6 +827,16 @@ export function PluginsConfig({
               background: "var(--bg-panel)",
             }}
           >
+            <ConfigAddButton
+              active={addMode}
+              label={t("i18n.addPlugin")}
+              onClick={() => {
+                setSelected(null);
+                setAddMode(true);
+                setActionError(null);
+                setActionMessage(null);
+              }}
+            />
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }}>
               {loading ? (
                 <div style={{ padding: "10px 8px", fontSize: 12, color: "var(--text-muted)" }}>
@@ -937,50 +948,6 @@ export function PluginsConfig({
                   </div>
                 ))
               )}
-            </div>
-            <div style={{ padding: "8px 6px", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddMode(true);
-                  setActionError(null);
-                  setActionMessage(null);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "7px 8px",
-                  borderRadius: 5,
-                  border: "none",
-                  width: "100%",
-                  cursor: "pointer",
-                  background: addMode ? "var(--bg-selected)" : "none",
-                  color: addMode ? "var(--accent)" : "var(--text-dim)",
-                  fontSize: 12,
-                }}
-                onMouseEnter={(e) => {
-                  if (!addMode) e.currentTarget.style.background = "var(--bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!addMode) e.currentTarget.style.background = "none";
-                }}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                 {t("i18n.addPlugin")}
-              </button>
             </div>
           </div>
 
