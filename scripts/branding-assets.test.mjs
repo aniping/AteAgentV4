@@ -64,3 +64,16 @@ test("PWA metadata and assets use ATE Agent branding", async () => {
     assert.equal(actualHash, expectedHash);
   }
 });
+
+test("PWA fetches Next.js static assets before falling back to cache", async () => {
+  const source = await readFile(serviceWorker, "utf8");
+
+  assert.match(
+    source,
+    /url\.pathname\.startsWith\("\/_next\/static\/"\)[\s\S]*?networkFirst\(request\)/,
+  );
+  assert.match(
+    source,
+    /async function networkFirst\(request\)[\s\S]*?await fetch\(request\)[\s\S]*?await caches\.match\(request\)/,
+  );
+});
