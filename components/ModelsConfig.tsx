@@ -145,6 +145,17 @@ export const INTERNAL_PROVIDER_CONFIG = {
   baseUrl: "http://ate-agent.rnd.huawei.com/v1",
   api: "openai-completions",
 } as const;
+export const ASCEND_PROVIDER_NAME = "Ascend";
+export const ASCEND_PROVIDER_CONFIG = {
+  baseUrl: "http://models.ascend.huawei.com",
+  api: "openai-completions",
+} as const;
+
+const INTERNAL_PROVIDER_PRESETS = [
+  { name: INTERNAL_PROVIDER_NAME, config: INTERNAL_PROVIDER_CONFIG },
+  { name: ASCEND_PROVIDER_NAME, config: ASCEND_PROVIDER_CONFIG },
+];
+const INTERNAL_PROVIDER_NAMES = new Set(INTERNAL_PROVIDER_PRESETS.map((preset) => preset.name));
 
 type ModelTestState =
   | { phase: "idle" }
@@ -1491,6 +1502,25 @@ function ProviderIcon({ id, size }: { id: string; size: number }) {
       />
     );
   }
+  if (id === ASCEND_PROVIDER_NAME) {
+    return (
+      <span
+        role="img"
+        aria-label="Ascend"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 5,
+          backgroundColor: "#fff",
+          backgroundImage: "url('/icons/ascend.png')",
+          backgroundPosition: "3% 49%",
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "280% 280%",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
 
   const pi = PROVIDER_ICONS[id];
   if (!pi) {
@@ -1532,7 +1562,7 @@ function ProviderIcon({ id, size }: { id: string; size: number }) {
 // ── Add provider picker ───────────────────────────────────────────────────────
 
 interface AddProviderPickerProps {
-  onAddInternal: () => void;
+  onAddInternal: (name: string, provider: ProviderEntry) => void;
   onAddCustom: () => void;
   onClose: () => void;
 }
@@ -1548,11 +1578,13 @@ export function AddProviderPicker({
 
   const q = search.trim().toLowerCase();
 
-  const showInternal = !q || [INTERNAL_PROVIDER_NAME, "internal", t("i18n.internalModels")]
-    .some((label) => label.toLowerCase().includes(q));
+  const visibleInternalProviders = INTERNAL_PROVIDER_PRESETS.filter((preset) =>
+    !q || [preset.name, "internal", t("i18n.internalModels")]
+      .some((label) => label.toLowerCase().includes(q))
+  );
   const showCustom = !q || "custom".includes(q) || "openai-compatible".includes(q) || "anthropic-compatible".includes(q);
 
-  const totalCount = Number(showInternal) + Number(showCustom);
+  const totalCount = visibleInternalProviders.length + Number(showCustom);
 
   const cardStyle: React.CSSProperties = {
     display: "flex", flexDirection: "row", alignItems: "center", gap: 8,
@@ -1597,26 +1629,27 @@ export function AddProviderPicker({
             <div style={{ padding: "20px 0", fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>{t("i18n.noProviders")}</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 8 }}>
-              {showInternal && (
+              {visibleInternalProviders.length > 0 && (
                 <div style={{ gridColumn: "1 / -1", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{t("i18n.internalModels")}</div>
               )}
-              {showInternal && (
+              {visibleInternalProviders.map((preset) => (
                 <button
-                  onClick={() => { onAddInternal(); onClose(); }}
+                  key={preset.name}
+                  onClick={() => { onAddInternal(preset.name, preset.config); onClose(); }}
                   style={cardStyle}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-panel)"; }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{INTERNAL_PROVIDER_NAME}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>openai-completions</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preset.name}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>{preset.config.api}</div>
                   </div>
-                  <ProviderIcon id={INTERNAL_PROVIDER_NAME} size={28} />
+                  <ProviderIcon id={preset.name} size={28} />
                 </button>
-              )}
+              ))}
 
               {showCustom && (
-                 <div style={{ gridColumn: "1 / -1", paddingTop: showInternal ? 6 : 0, fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{t("i18n.custom")}</div>
+                 <div style={{ gridColumn: "1 / -1", paddingTop: visibleInternalProviders.length > 0 ? 6 : 0, fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{t("i18n.custom")}</div>
               )}
               {showCustom && (
                 <button
@@ -1697,18 +1730,18 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
     setSelection({ type: "provider", name: finalName });
   }, [config.providers]);
 
-  const addInternalProvider = useCallback(() => {
+  const addInternalProvider = useCallback((name: string, provider: ProviderEntry) => {
     setConfig((prev) => {
-      if (prev.providers?.[INTERNAL_PROVIDER_NAME]) return prev;
+      if (prev.providers?.[name]) return prev;
       return {
         ...prev,
         providers: {
           ...(prev.providers ?? {}),
-          [INTERNAL_PROVIDER_NAME]: { ...INTERNAL_PROVIDER_CONFIG },
+          [name]: { ...provider },
         },
       };
     });
-    setSelection({ type: "provider", name: INTERNAL_PROVIDER_NAME });
+    setSelection({ type: "provider", name });
   }, []);
 
   const updateProvider = useCallback((name: string, p: ProviderEntry) => {
@@ -1938,7 +1971,7 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
                       onMouseEnter={(e) => { if (!isProviderSelected) e.currentTarget.style.background = "var(--bg-hover)"; }}
                       onMouseLeave={(e) => { if (!isProviderSelected) e.currentTarget.style.background = "none"; }}
                     >
-                      {pName === INTERNAL_PROVIDER_NAME ? (
+                      {INTERNAL_PROVIDER_NAMES.has(pName) ? (
                         <ProviderIcon id={pName} size={16} />
                       ) : (
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-dim)", flexShrink: 0 }}>

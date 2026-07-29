@@ -10,6 +10,8 @@ const jiti = createJiti(import.meta.url, {
 });
 const {
   AddProviderPicker,
+  ASCEND_PROVIDER_CONFIG,
+  ASCEND_PROVIDER_NAME,
   INTERNAL_PROVIDER_CONFIG,
   INTERNAL_PROVIDER_NAME,
 } = await jiti.import("./ModelsConfig.tsx");
@@ -19,6 +21,14 @@ test("internal provider uses the AteTest defaults", () => {
   assert.equal(INTERNAL_PROVIDER_NAME, "AteTest");
   assert.deepEqual(INTERNAL_PROVIDER_CONFIG, {
     baseUrl: "http://ate-agent.rnd.huawei.com/v1",
+    api: "openai-completions",
+  });
+});
+
+test("Ascend provider uses the internal model defaults", () => {
+  assert.equal(ASCEND_PROVIDER_NAME, "Ascend");
+  assert.deepEqual(ASCEND_PROVIDER_CONFIG, {
+    baseUrl: "http://models.ascend.huawei.com",
     api: "openai-completions",
   });
 });
@@ -47,6 +57,8 @@ test("provider picker shows internal and custom providers but hides managed opti
   assert.match(html, /Internal models/);
   assert.match(html, /AteTest/);
   assert.match(html, /aria-label="HUMEP"/);
+  assert.match(html, /Ascend/);
+  assert.match(html, /aria-label="Ascend"/);
   assert.match(html, /Custom endpoint format/);
   assert.doesNotMatch(html, /Subscriptions|API Key|Claude subscription|DeepSeek/);
 });
