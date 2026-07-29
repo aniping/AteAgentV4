@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
 import JSZip from "jszip";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import {
+  MAX_SKILL_ARCHIVE_BYTES,
+  MAX_SKILL_ARCHIVE_ENTRY_BYTES,
+  MAX_SKILL_ARCHIVE_EXPANDED_BYTES,
+  MAX_SKILL_ARCHIVE_EXPANDED_LABEL,
+  MAX_SKILL_ARCHIVE_LABEL,
+} from "./skill-archive-limits";
 
-export const MAX_SKILL_ARCHIVE_BYTES = 50 * 1024 * 1024;
-export const MAX_SKILL_ARCHIVE_EXPANDED_BYTES = 128 * 1024 * 1024;
-export const MAX_SKILL_ARCHIVE_ENTRY_BYTES = 64 * 1024 * 1024;
+export {
+  MAX_SKILL_ARCHIVE_BYTES,
+  MAX_SKILL_ARCHIVE_ENTRY_BYTES,
+  MAX_SKILL_ARCHIVE_EXPANDED_BYTES,
+} from "./skill-archive-limits";
 export const MAX_SKILL_ARCHIVE_ENTRIES = 512;
 
 const INTEGRATION_MANIFEST = "ateagent-integration.json";
@@ -28,7 +37,7 @@ export interface ParsedArchiveSkill {
 export interface SkillArchiveMcp {
   serverName: string;
   executable: string;
-  requiredTools: string[];
+  requiredTools?: string[];
   args: string[];
   env?: Record<string, string>;
 }
@@ -204,12 +213,22 @@ function parseMcp(value: unknown, filesByPath: Map<string, SkillArchiveFile>): S
   if (typeof mcp.executable !== "string") return archiveError("mcp.executable is required");
   const executable = normalizedArchivePath(mcp.executable, false);
   if (!filesByPath.has(executable)) return archiveError(`MCP executable is missing: ${executable}`);
-  const requiredTools = requireStringArray(mcp.requiredTools ?? [], "mcp.requiredTools");
-  if (requiredTools.some((tool) => !tool || tool.length > 128 || /\s/.test(tool))) {
-    return archiveError("mcp.requiredTools contains an invalid tool name");
+  let requiredTools: string[] | undefined;
+  if (mcp.requiredTools !== undefined) {
+    const parsed = requireStringArray(mcp.requiredTools, "mcp.requiredTools");
+    if (parsed.some((tool) => !tool || tool.length > 128 || /\s/.test(tool))) {
+      return archiveError("mcp.requiredTools contains an invalid tool name");
+    }
+    if (parsed.length > 0) requiredTools = parsed;
   }
   const args = requireStringArray(mcp.args ?? [], "mcp.args");
-  return { serverName, executable, requiredTools, args, env: parseEnvironment(mcp.env) };
+  return {
+    serverName,
+    executable,
+    ...(requiredTools ? { requiredTools } : {}),
+    args,
+    env: parseEnvironment(mcp.env),
+  };
 }
 
 function verifyChecksums(files: SkillArchiveFile[], checksumFile: SkillArchiveFile): void {
@@ -328,7 +347,7 @@ function parseIntegration(files: SkillArchiveFile[], manifestFile: SkillArchiveF
 
 export async function parseSkillArchive(input: Buffer | Uint8Array): Promise<ParsedSkillArchive> {
   if (input.byteLength > MAX_SKILL_ARCHIVE_BYTES) {
-    return archiveError("Skill ZIP must be 50MB or smaller");
+    return archiveError(`Skill ZIP must be ${MAX_SKILL_ARCHIVE_LABEL} or smaller`);
   }
   let zip: JSZip;
   try {
@@ -363,7 +382,7 @@ export async function parseSkillArchive(input: Buffer | Uint8Array): Promise<Par
       }
       expandedBytes += uncompressedSize;
       if (expandedBytes > MAX_SKILL_ARCHIVE_EXPANDED_BYTES) {
-        return archiveError("Expanded skill ZIP must be 128MB or smaller");
+        return archiveError(`Expanded skill ZIP must be ${MAX_SKILL_ARCHIVE_EXPANDED_LABEL} or smaller`);
       }
     }
     fileEntries.push({ path, entry, mode });
@@ -380,11 +399,13 @@ export async function parseSkillArchive(input: Buffer | Uint8Array): Promise<Par
       item.path,
       entryLimit,
       entryLimit < MAX_SKILL_ARCHIVE_ENTRY_BYTES
-        ? "Expanded skill ZIP must be 128MB or smaller"
+        ? `Expanded skill ZIP must be ${MAX_SKILL_ARCHIVE_EXPANDED_LABEL} or smaller`
         : `Archive entry is too large: ${item.path}`,
     );
     expandedBytes += data.byteLength;
-    if (expandedBytes > MAX_SKILL_ARCHIVE_EXPANDED_BYTES) return archiveError("Expanded skill ZIP must be 128MB or smaller");
+    if (expandedBytes > MAX_SKILL_ARCHIVE_EXPANDED_BYTES) {
+      return archiveError(`Expanded skill ZIP must be ${MAX_SKILL_ARCHIVE_EXPANDED_LABEL} or smaller`);
+    }
     files.push({ path: item.path, data, mode: item.mode });
   }
 

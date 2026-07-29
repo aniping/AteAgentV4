@@ -131,8 +131,7 @@ my-integration-1.0.0-win32-x64.zip
     "args": ["--stdio"],
     "env": {
       "LOG_LEVEL": "info"
-    },
-    "requiredTools": ["inspect_state", "run_action"]
+    }
   }
 }
 ```
@@ -153,7 +152,7 @@ my-integration-1.0.0-win32-x64.zip
 | `mcp.executable` | `mcp` 存在时 | ZIP 内可执行文件的相对路径；文件必须真实存在。 |
 | `mcp.args` | 否 | 启动可执行文件时原样传入的字符串数组。 |
 | `mcp.env` | 否 | 注入进程的环境变量，键和值都必须是字符串。不要把密钥写进发布包。 |
-| `mcp.requiredTools` | 否 | 允许直接暴露给智能体的 MCP 工具名。省略或留空表示暴露服务提供的全部工具。 |
+| `mcp.requiredTools` | 否（兼容字段，不推荐新包使用） | 旧包可用它把指定工具提升为直接工具；它不是必填字段，也不负责验证服务工具。新包应省略并使用 MCP 自动发现。 |
 
 当前解析器只使用上表字段。额外字段可能会被忽略，不要依赖它们影响安装或界面展示。
 
@@ -161,7 +160,8 @@ my-integration-1.0.0-win32-x64.zip
 
 - 服务必须通过标准输入和标准输出使用 stdio MCP 协议。
 - 标准输出只用于 MCP 协议消息；诊断日志应写入标准错误。
-- `requiredTools` 中的名称必须与服务实际公布的工具名一致，每项不能为空、不能包含空白且最多 128 个字符。
+- 服务必须正确实现 MCP `tools/list`；`pi-mcp-adapter` 会自动搜索、描述和调用服务公布的工具。
+- 为兼容旧包，解析器仍接受 `requiredTools`。保留该字段时，每项必须是服务真实公布的工具名，不能为空、不能包含空白且最多 128 个字符；这些工具会被提升为直接工具并占用额外上下文。
 - Windows 建议分发自包含 `.exe`；Linux 和 macOS 应分发带正确 shebang 的可执行文件。安装器会在非 Windows 平台为清单指定的文件补充执行权限。
 - 一个清单只能声明一个平台、架构和 MCP 可执行文件。需要支持多个系统时，应分别生成不同 ZIP，并正确填写 `platform` 和 `arch`。
 - 不要通过省略 `platform` 或 `arch` 来伪装可移植性；只有运行时确实跨平台时才省略。
@@ -256,7 +256,7 @@ finally {
 - `SKILL.md` 的 `name`、清单的 `skill.name` 和预期安装目录一致。
 - `skill.path` 精确指向包含 `SKILL.md` 的目录。
 - `mcp.executable` 指向 ZIP 内真实存在的文件。
-- `requiredTools` 与 MCP 服务公布的工具名逐一一致。
+- MCP 服务通过 `tools/list` 返回预期工具；新包无需在清单中重复这些名称。
 - `SHA256SUMS.json` 覆盖除自身外的全部文件。
 - 包内不含密码、API key、私钥或用户机器专属配置。
 
@@ -286,9 +286,9 @@ finally {
 
 | 限制或错误 | 处理方式 |
 | --- | --- |
-| ZIP 超过 50 MiB | 缩小运行时，移除调试符号、缓存和无关资源。 |
-| 解压后总大小超过 128 MiB | 拆分或精简运行时。 |
-| 单个文件超过 64 MiB | 缩小或拆分该文件。 |
+| ZIP 超过 512 MiB | 缩小运行时，移除调试符号、缓存和无关资源。 |
+| 解压后总大小超过 1 GiB | 拆分或精简运行时。单个文件也不能超过 512 MiB。 |
+| 单个文件超过 512 MiB | 缩小或拆分该文件。 |
 | ZIP 条目超过 512 个 | 合并或删除零散资源；目录条目也计入总数。 |
 | `Archive must contain exactly one SKILL.md` | 删除重复技能，确保一个 ZIP 只安装一个 Skill。 |
 | `Plain skill archives cannot contain files outside...` | 把普通包的全部文件移动到 Skill 根目录内。 |

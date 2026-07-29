@@ -282,8 +282,8 @@ async function planMcpConfig(
   }
   const server: Record<string, unknown> = {
     command: join(integrationPath, ...archive.mcp.executable.split("/")),
-    directTools: archive.mcp.requiredTools.length > 0 ? archive.mcp.requiredTools : true,
   };
+  if (archive.mcp.requiredTools?.length) server.directTools = archive.mcp.requiredTools;
   if (archive.mcp.args.length > 0) server.args = archive.mcp.args;
   if (archive.mcp.env && Object.keys(archive.mcp.env).length > 0) server.env = archive.mcp.env;
   return {

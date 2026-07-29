@@ -6,11 +6,9 @@ const jiti = createJiti(import.meta.url);
 
 test("Next proxy preserves requests up to the bounded skill upload limit", async () => {
   const { default: config } = await jiti.import("./next.config.ts");
-  const { MAX_SKILL_ARCHIVE_BYTES } = await jiti.import("./lib/skill-archive.ts");
+  const { MAX_SKILL_UPLOAD_REQUEST_BYTES } = await jiti.import("./lib/skill-archive-limits.ts");
 
-  assert.ok(
-    config.experimental?.proxyClientMaxBodySize >= MAX_SKILL_ARCHIVE_BYTES + 2 * 1024 * 1024,
-  );
+  assert.equal(config.experimental?.proxyClientMaxBodySize, MAX_SKILL_UPLOAD_REQUEST_BYTES);
 });
 
 test("portable builds trace Pi runtime assets loaded dynamically from disk", async () => {
