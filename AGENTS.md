@@ -53,7 +53,7 @@ app/api/
   auth/logout/[provider]/route.ts POST OAuth logout
   auth/providers/route.ts         GET OAuth provider list
   cwd/validate/route.ts           POST validate/select a cwd
-  default-cwd/route.ts            POST create ~/pi-cwd-YYYYMMDD
+  default-cwd/route.ts            POST create ~/ate-cwd-YYYYMMDD
   files/[...path]/route.ts        GET file contents for viewer
   home/route.ts                   GET user home directory
   models/route.ts                 GET { models, modelList, defaultModel }
@@ -154,7 +154,7 @@ Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `au
 - Sessions whose cwd points at a removed worktree are inferred back into the main project instead of becoming a phantom project row.
 
 ### File access allow-list
-- `/api/files` is intentionally not a general filesystem browser. Allowed roots come from session cwds, their resolved project roots, `~/pi-cwd-*`, and roots explicitly added with `allowFileRoot()`.
+- `/api/files` is intentionally not a general filesystem browser. Allowed roots come from session cwds, their resolved project roots, `~/ate-cwd-*`, and roots explicitly added with `allowFileRoot()`.
 - `/api/cwd/validate`, `/api/default-cwd`, and `/api/worktrees` call `allowFileRoot()` when they make a new location browsable.
 
 ### Plugins and skills

@@ -5,6 +5,7 @@ import type { SessionInfo } from "@/lib/types";
 import { useI18n } from "@/hooks/useI18n";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { FileExplorer, type FileExplorerHandle } from "./FileExplorer";
+import { BrandMark } from "./BrandMark";
 
 declare global {
   interface Window {
@@ -339,12 +340,12 @@ function useScramble(target: string, running: boolean): string {
   return display;
 }
 
-function PiWebTitle() {
+function BrandTitle() {
   const [showVersion, setShowVersion] = useState(false);
   const [scrambling, setScrambling] = useState(false);
   const revertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}p${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "Pi Web";
+  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}a${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "ATE Agent";
   const display = useScramble(target, scrambling);
 
   const triggerScramble = useCallback((toVersion: boolean) => {
@@ -370,14 +371,17 @@ function PiWebTitle() {
     <button
       onClick={handleClick}
       style={{
-        background: "none", border: "none", padding: 0, cursor: "default",
+        display: "flex", alignItems: "center", gap: 7,
+        background: "none", border: "none", padding: 0, cursor: "pointer",
         fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em",
         color: showVersion ? "var(--accent)" : "var(--text)",
         fontFamily: "var(--font-mono)",
         minWidth: "6ch",
       }}
+      aria-label="ATE Agent"
     >
-      {display}
+      <BrandMark size={22} />
+      <span>{display}</span>
     </button>
   );
 }
@@ -840,7 +844,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <PiWebTitle />
+          <BrandTitle />
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={handleNewSession}

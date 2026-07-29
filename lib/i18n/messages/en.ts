@@ -10,6 +10,7 @@ export const enLocale: LocalePlugin = {
     "common.models": "Models",
     "common.skills": "Skills",
     "common.plugins": "Plugins",
+    "brand.subtitle": "Wireless Equipment Assistant",
     "sidebar.hide": "Hide sidebar",
     "sidebar.show": "Show sidebar",
     "theme.light": "Switch to light mode",

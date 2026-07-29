@@ -109,6 +109,51 @@ pre, code {
   font-family: var(--font-mono);
 }
 
+.ate-brand-mark {
+  display: block;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 7px 14px rgba(251, 58, 78, 0.16));
+}
+
+.ate-brand-hero--animated {
+  animation: ate-brand-float 3s ease-in-out infinite;
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.ate-brand-title {
+  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.ate-brand-subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+@keyframes ate-brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ate-brand-hero--animated {
+    animation: none;
+  }
+}
+
 /* react-markdown output styles */
 .markdown-body {
   font-size: 14px;

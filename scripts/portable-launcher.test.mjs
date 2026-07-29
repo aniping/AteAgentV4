@@ -40,3 +40,10 @@ test("portable startup exposes the bundled npm tools to child processes", async 
 
   assert.match(startScript, /set "PATH=%~dp0runtime;%PATH%"/);
 });
+
+test("portable package uses the ATE Agent artifact name", async () => {
+  const packageScript = await readFile(new URL("./package-portable.ps1", import.meta.url), "utf8");
+
+  assert.match(packageScript, /\$artifactName = "ate-agent-\$\(\$package\.version\)-win-\$\(\$runtime\.arch\)"/);
+  assert.doesNotMatch(packageScript, /\$artifactName = "pi-web-/);
+});

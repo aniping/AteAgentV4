@@ -32,10 +32,10 @@ function launch() {
   process.env.PI_WEB_HOSTNAME = hostname;
   process.env.PORT = String(port);
 
-  console.log(`Pi Web is starting on http://${hostname}:${port}`);
+  console.log(`ATE Agent is starting on http://${hostname}:${port}`);
   if (hostname === "0.0.0.0") {
     console.log(`Other computers can open http://<this-computer-LAN-IP>:${port}`);
-    console.warn("Only use this package on a trusted network; Pi Web has no application-level authentication.");
+    console.warn("Only use this package on a trusted network; ATE Agent has no application-level authentication.");
   }
 
   const appRoot = path.join(__dirname, "app");

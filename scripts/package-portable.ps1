@@ -18,7 +18,7 @@ if ($runtime.arch -notin @('x64', 'arm64')) {
     throw "Unsupported Windows architecture for a portable package: $($runtime.arch)"
 }
 
-$artifactName = "pi-web-$($package.version)-win-$($runtime.arch)"
+$artifactName = "ate-agent-$($package.version)-win-$($runtime.arch)"
 $stagingRoot = [IO.Path]::GetFullPath((Join-Path $buildRoot "portable\$artifactName"))
 $archivePath = [IO.Path]::GetFullPath((Join-Path $releaseRoot "$artifactName.zip"))
 $nodeArchiveName = "node-$($runtime.version)-win-$($runtime.arch).zip"
@@ -141,7 +141,7 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable-start.cmd') -Destinati
 Set-Content -LiteralPath (Join-Path $runtimeRoot 'NODE-VERSION.txt') -Encoding UTF8 -Value $runtime.version
 
 $packageReadme = @"
-Pi Web $($package.version) Windows $($runtime.arch) portable package
+ATE Agent $($package.version) Windows $($runtime.arch) portable package
 
 This package includes Node.js $($runtime.version) with npm/npx; Node.js does not need to be installed separately.
 
@@ -159,7 +159,7 @@ Optional arguments:
   start.cmd -H 0.0.0.0 -p 8080 Listen on all network interfaces with port 8080
 
 Windows Defender Firewall may require an inbound rule for the selected port.
-Pi Web has no application-level authentication. Never expose it directly to the internet.
+ATE Agent has no application-level authentication. Never expose it directly to the internet.
 "@
 Set-Content -LiteralPath (Join-Path $stagingRoot 'README.txt') -Encoding UTF8 -Value $packageReadme
 
