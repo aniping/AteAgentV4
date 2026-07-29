@@ -886,10 +886,56 @@ span.linenumber {
   to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
-/* Desktop sidebar: animate width */
+.panel-resize-anchor {
+  display: none;
+}
+
+/* Desktop resizable panels */
 @media (min-width: 641px) {
   .sidebar-overlay-backdrop {
     display: none !important;
+  }
+  .panel-resize-anchor {
+    position: relative;
+    z-index: 250;
+    display: block;
+    width: 0;
+    flex: 0 0 0;
+    align-self: stretch;
+  }
+  .panel-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    width: 9px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+  }
+  .panel-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background 120ms ease, box-shadow 120ms ease;
+  }
+  .panel-resize-handle:hover::after,
+  .panel-resize-handle:focus-visible::after,
+  .panel-resizing-left .panel-resize-handle-left::after,
+  .panel-resizing-right .panel-resize-handle-right::after {
+    background: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .app-shell.panel-resizing-left,
+  .app-shell.panel-resizing-left *,
+  .app-shell.panel-resizing-right,
+  .app-shell.panel-resizing-right * {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
   .sidebar-container {
     position: relative;
@@ -897,42 +943,59 @@ span.linenumber {
     transition: width 0.2s ease, min-width 0.2s ease;
   }
   .sidebar-container.sidebar-open {
-    width: 260px;
-    min-width: 260px;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
   }
   .sidebar-container.sidebar-closed {
     width: 0;
     min-width: 0;
     border-right: none !important;
   }
-  /* keep inner content at fixed width so it doesn't reflow during animation */
+  /* Keep content stable while the panel animates closed. */
   .sidebar-container > * {
-    width: 260px;
-    min-width: 260px;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
   }
-}
-
-
-/* Right panel: animate width */
-@media (min-width: 641px) {
+  .panel-resizing-left .sidebar-container {
+    transition: none;
+  }
+  .panel-resizing-left .sidebar-container.sidebar-open {
+    width: var(--sidebar-drag-width);
+    min-width: var(--sidebar-drag-width);
+  }
+  .panel-resizing-left .sidebar-container.sidebar-open > * {
+    width: max(var(--sidebar-drag-width), var(--sidebar-min-width));
+    min-width: max(var(--sidebar-drag-width), var(--sidebar-min-width));
+  }
   .right-panel-container {
     overflow: hidden;
     transition: width 0.2s ease, min-width 0.2s ease;
     flex-shrink: 0;
   }
   .right-panel-container.right-panel-open {
-    width: 42%;
-    min-width: 300px;
+    width: var(--right-panel-width);
+    min-width: var(--right-panel-width);
   }
   .right-panel-container.right-panel-closed {
     width: 0;
     min-width: 0;
     border-left: none !important;
   }
-  /* keep inner content at fixed width so it doesn't reflow during animation */
+  /* Keep content stable while the panel animates closed. */
   .right-panel-container > * {
-    width: 42vw;
-    min-width: 300px;
+    width: var(--right-panel-width);
+    min-width: var(--right-panel-width);
+  }
+  .panel-resizing-right .right-panel-container {
+    transition: none;
+  }
+  .panel-resizing-right .right-panel-container.right-panel-open {
+    width: var(--right-panel-drag-width);
+    min-width: var(--right-panel-drag-width);
+  }
+  .panel-resizing-right .right-panel-container.right-panel-open > * {
+    width: max(var(--right-panel-drag-width), var(--right-panel-min-width));
+    min-width: max(var(--right-panel-drag-width), var(--right-panel-min-width));
   }
 }
 
