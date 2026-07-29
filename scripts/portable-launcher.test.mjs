@@ -42,11 +42,12 @@ test("portable startup exposes the bundled npm tools to child processes", async 
 });
 
 test("Windows package builds an ATE Agent NSIS installer", async () => {
-  const [packageJson, packageCommand, packageScript, installerScript, stopSource] = await Promise.all([
+  const [packageJson, packageCommand, packageScript, installerScript, launcherSource, stopSource] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("./package-installer.cmd", import.meta.url), "utf8"),
     readFile(new URL("./package-installer.cjs", import.meta.url), "utf8"),
     readFile(new URL("./windows-installer.nsi", import.meta.url), "utf8"),
+    readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8"),
     readFile(new URL("./stop-installed-server.cs", import.meta.url), "utf8"),
   ]);
 
@@ -56,14 +57,17 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
   assert.match(packageScript, /removeRedundantNestedPackage/);
   assert.match(packageScript, /makensis/i);
   assert.match(installerScript, /WriteUninstaller/);
-  assert.match(installerScript, /CreateShortcut/);
+  assert.match(installerScript, /InstallDir "\$PROGRAMFILES64\\ATEAgent"/);
+  assert.match(installerScript, /CreateShortcut[^\r\n]+ATE-Agent\.exe/);
   assert.match(installerScript, /RequestExecutionLevel admin/);
   assert.match(installerScript, /stop-installed-server\.exe/);
   assert.doesNotMatch(installerScript, /[^\x00-\x7F]/);
+  assert.match(packageScript, /win32icon/i);
+  assert.match(launcherSource, /runtime[\\]node\.exe/);
   assert.match(stopSource, /MainModule\.FileName/);
   assert.match(stopSource, /process\.Kill\(\)/);
   assert.doesNotMatch(
-    [packageJson, packageCommand, packageScript, installerScript, stopSource].join("\n"),
+    [packageJson, packageCommand, packageScript, installerScript, launcherSource, stopSource].join("\n"),
     /pwsh|powershell|\.ps1/i,
   );
 });

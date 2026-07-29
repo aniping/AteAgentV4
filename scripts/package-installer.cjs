@@ -54,6 +54,35 @@ function listFiles(root) {
   return files;
 }
 
+async function createWindowsIcon(svgPath, destination) {
+  const sharp = require("sharp");
+  const sizes = [16, 24, 32, 48, 64, 128, 256];
+  const images = await Promise.all(
+    sizes.map((size) => sharp(svgPath).resize(size, size).png().toBuffer()),
+  );
+  const directory = Buffer.alloc(6 + images.length * 16);
+  directory.writeUInt16LE(0, 0);
+  directory.writeUInt16LE(1, 2);
+  directory.writeUInt16LE(images.length, 4);
+
+  let imageOffset = directory.length;
+  images.forEach((image, index) => {
+    const size = sizes[index];
+    const entryOffset = 6 + index * 16;
+    directory.writeUInt8(size === 256 ? 0 : size, entryOffset);
+    directory.writeUInt8(size === 256 ? 0 : size, entryOffset + 1);
+    directory.writeUInt8(0, entryOffset + 2);
+    directory.writeUInt8(0, entryOffset + 3);
+    directory.writeUInt16LE(1, entryOffset + 4);
+    directory.writeUInt16LE(32, entryOffset + 6);
+    directory.writeUInt32LE(image.length, entryOffset + 8);
+    directory.writeUInt32LE(imageOffset, entryOffset + 12);
+    imageOffset += image.length;
+  });
+
+  fs.writeFileSync(destination, Buffer.concat([directory, ...images]));
+}
+
 function removeRedundantNestedPackage(topLevelPackage, nestedPackage) {
   if (!fs.existsSync(nestedPackage)) return;
   if (!fs.existsSync(topLevelPackage)) {
@@ -201,6 +230,9 @@ async function main() {
   fs.copyFileSync(path.join(__dirname, "portable-start.cmd"), path.join(stagingRoot, "start.cmd"));
   fs.writeFileSync(path.join(runtimeRoot, "NODE-VERSION.txt"), `${process.version}\r\n`, "utf8");
 
+  const appIconPath = path.join(stagingRoot, "ate-agent.ico");
+  await createWindowsIcon(path.join(__dirname, "ate-agent-icon.svg"), appIconPath);
+
   const csc = findExecutable(
     [
       path.join(process.env.WINDIR ?? "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
@@ -217,19 +249,31 @@ async function main() {
     `/out:${stopHelperPath}`,
     path.join(__dirname, "stop-installed-server.cs"),
   ]);
+  const launcherPath = path.join(stagingRoot, "ATE-Agent.exe");
+  run(csc, [
+    "/nologo",
+    "/target:winexe",
+    "/optimize+",
+    "/reference:System.Windows.Forms.dll",
+    `/win32icon:${appIconPath}`,
+    `/out:${launcherPath}`,
+    path.join(__dirname, "ate-agent-launcher.cs"),
+  ]);
 
   const packageReadme = `ATE Agent ${packageJson.version} Windows ${process.arch}\r\n\r\n` +
     `This installation includes Node.js ${process.version} with npm/npx; Node.js does not need to be installed separately.\r\n\r\n` +
-    "Start:\r\n  Double-click start.cmd\r\n\r\n" +
+    "Start:\r\n  Double-click ATE-Agent.exe\r\n\r\n" +
     "Default address:\r\n  http://0.0.0.0:30141\r\n\r\n" +
     "Access from another computer on the same trusted network:\r\n  http://<this-computer-LAN-IP>:30141\r\n\r\n" +
-    "Optional arguments:\r\n  start.cmd -H 127.0.0.1        Listen on this computer only\r\n" +
-    "  start.cmd -H 0.0.0.0 -p 8080 Listen on all network interfaces with port 8080\r\n\r\n" +
+    "Optional arguments:\r\n  ATE-Agent.exe -H 127.0.0.1        Listen on this computer only\r\n" +
+    "  ATE-Agent.exe -H 0.0.0.0 -p 8080 Listen on all network interfaces with port 8080\r\n\r\n" +
     "Windows Defender Firewall may require an inbound rule for the selected port.\r\n" +
     "ATE Agent has no application-level authentication. Never expose it directly to the internet.\r\n";
   fs.writeFileSync(path.join(stagingRoot, "README.txt"), packageReadme, "utf8");
 
   const requiredFiles = [
+    "ATE-Agent.exe",
+    "ate-agent.ico",
     "start.cmd",
     "launcher.cjs",
     "stop-installed-server.exe",
@@ -257,7 +301,7 @@ async function main() {
 
   const relativePaths = listFiles(stagingRoot).map((file) => path.relative(stagingRoot, file));
   const longestRelativePath = relativePaths.sort((a, b) => b.length - a.length)[0];
-  const defaultLongestPath = path.join("C:\\Program Files\\ATE Agent", longestRelativePath);
+  const defaultLongestPath = path.join("C:\\Program Files\\ATEAgent", longestRelativePath);
   if (defaultLongestPath.length >= 260) {
     throw new Error(`Installer payload still exceeds the Windows MAX_PATH limit: ${defaultLongestPath}`);
   }
@@ -287,6 +331,7 @@ async function main() {
     `/DAPP_ARCH=${process.arch}`,
     `/DSOURCE_ROOT=${stagingRoot}`,
     `/DOUTPUT_FILE=${installerPath}`,
+    `/DAPP_ICON=${appIconPath}`,
     `/DMAX_INSTALL_DIR_LENGTH=${maxInstallDirLength}`,
     path.join(__dirname, "windows-installer.nsi"),
   ]);
