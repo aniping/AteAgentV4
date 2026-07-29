@@ -26,7 +26,6 @@ ManifestDPIAware true
 !ifndef MAX_INSTALL_DIR_LENGTH
   !error "MAX_INSTALL_DIR_LENGTH is required"
 !endif
-
 Name "ATE Agent"
 OutFile "${OUTPUT_FILE}"
 Icon "${APP_ICON}"
@@ -48,7 +47,6 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright 2026 ATE Agent"
 
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\ATE-Agent.exe"
-!define MUI_FINISHPAGE_RUN_NOTCHECKED
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -93,6 +91,11 @@ Section "ATE Agent" SecMain
   Delete "$INSTDIR\stop-installed-server.exe"
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\runtime"
+  RMDir /r "$INSTDIR\support"
+  Delete "$INSTDIR\launcher.cjs"
+  Delete "$INSTDIR\ate-agent.ico"
+  Delete "$INSTDIR\ate-agent-44.png"
+  Delete "$INSTDIR\ate-agent-150.png"
   SetOutPath "$INSTDIR"
   File /r "${SOURCE_ROOT}\*"
 
@@ -125,7 +128,7 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\ATE Agent"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent"
   DeleteRegKey HKLM "Software\ATE Agent"
-  RMDir /r "$INSTDIR"
+  RMDir /r /REBOOTOK "$INSTDIR"
 SectionEnd
 
 Function un.StopATEAgent

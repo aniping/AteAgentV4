@@ -38,7 +38,7 @@ function launch() {
     console.warn("Only use this package on a trusted network; ATE Agent has no application-level authentication.");
   }
 
-  const appRoot = path.join(__dirname, "app");
+  const appRoot = path.join(__dirname, "..", "app");
   process.chdir(appRoot);
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require(path.join(appRoot, "server.js"));
