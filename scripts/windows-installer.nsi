@@ -20,13 +20,17 @@ ManifestDPIAware true
 !ifndef OUTPUT_FILE
   !error "OUTPUT_FILE is required"
 !endif
+!ifndef APP_ICON
+  !error "APP_ICON is required"
+!endif
 !ifndef MAX_INSTALL_DIR_LENGTH
   !error "MAX_INSTALL_DIR_LENGTH is required"
 !endif
 
 Name "ATE Agent"
 OutFile "${OUTPUT_FILE}"
-InstallDir "$PROGRAMFILES64\ATE Agent"
+Icon "${APP_ICON}"
+InstallDir "$PROGRAMFILES64\ATEAgent"
 InstallDirRegKey HKLM "Software\ATE Agent" "InstallDir"
 SetCompressor /SOLID lzma
 SetCompressorDictSize 64
@@ -43,7 +47,7 @@ VIAddVersionKey /LANG=1033 "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright 2026 ATE Agent"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\start.cmd"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\ATE-Agent.exe"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 
 !insertmacro MUI_PAGE_WELCOME
@@ -90,15 +94,16 @@ Section "ATE Agent" SecMain
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "Publisher" "ATE Agent"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayIcon" "$INSTDIR\ATE-Agent.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "NoRepair" 1
 
   CreateDirectory "$SMPROGRAMS\ATE Agent"
-  CreateShortcut "$SMPROGRAMS\ATE Agent\ATE Agent.lnk" "$INSTDIR\start.cmd" "" "$INSTDIR\start.cmd" 0 SW_SHOWNORMAL "" "ATE Agent"
+  CreateShortcut "$SMPROGRAMS\ATE Agent\ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "ATE Agent"
   CreateShortcut "$SMPROGRAMS\ATE Agent\Uninstall ATE Agent.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$DESKTOP\ATE Agent.lnk" "$INSTDIR\start.cmd" "" "$INSTDIR\start.cmd" 0 SW_SHOWNORMAL "" "ATE Agent"
+  CreateShortcut "$DESKTOP\ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "ATE Agent"
 SectionEnd
 
 Section "Uninstall"

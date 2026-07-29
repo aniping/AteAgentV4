@@ -15,7 +15,7 @@ ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基�
 ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
-安装程序默认安装到 `C:\Program Files\ATE Agent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。
+安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。快捷方式启动带有 ATE Agent 红色图标的 `ATE-Agent.exe`；`start.cmd` 仅作为兼容入口保留。
 
 安装完成后双击 **ATE Agent** 快捷方式，本机浏览器访问：
 
