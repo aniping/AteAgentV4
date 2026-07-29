@@ -19,6 +19,13 @@ import { copyText } from "@/lib/clipboard";
 import { getFileName } from "@/lib/file-paths";
 import { buildAtMentionText, buildFileAtMentionsText, buildFileLineMentionText } from "@/lib/file-fuzzy";
 import { getInitialNavigation } from "@/lib/initial-navigation";
+import {
+  clampPanelDragWidth,
+  getAvailablePanelMaxWidth,
+  parseStoredPanelWidth,
+  settlePanelResize,
+  type PanelResizeConfig,
+} from "@/lib/panel-resize";
 import type { SessionInfo, SessionTreeNode } from "@/lib/types";
 import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
@@ -33,6 +40,51 @@ type AutoNameStatus =
 
 const TOP_BAR_ICON_BUTTON_SIZE = 36;
 const LANGUAGE_MENU_WIDTH = 176;
+const CENTER_MIN_WIDTH = 360;
+const DEFAULT_SIDEBAR_WIDTH = 260;
+const DEFAULT_RIGHT_PANEL_WIDTH_RATIO = 0.42;
+const SIDEBAR_WIDTH_STORAGE_KEY = "pi-sidebar-width";
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = "pi-right-panel-width";
+const SIDEBAR_RESIZE_CONFIG: PanelResizeConfig = {
+  minWidth: 200,
+  maxWidth: 480,
+  collapseThreshold: 120,
+};
+const RIGHT_PANEL_RESIZE_CONFIG: PanelResizeConfig = {
+  minWidth: 300,
+  maxWidth: 960,
+  collapseThreshold: 180,
+};
+
+type ResizingPanel = "left" | "right";
+type ActivePanelResize = {
+  side: ResizingPanel;
+  pointerId: number;
+  currentWidth: number;
+  maxWidth: number;
+};
+
+function PanelResizeHandle({
+  side,
+  label,
+  onPointerDown,
+}: {
+  side: ResizingPanel;
+  label: string;
+  onPointerDown: (side: ResizingPanel, event: React.PointerEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div className="panel-resize-anchor">
+      <div
+        className={`panel-resize-handle panel-resize-handle-${side}`}
+        role="separator"
+        aria-label={label}
+        aria-orientation="vertical"
+        onPointerDown={(event) => onPointerDown(side, event)}
+      />
+    </div>
+  );
+}
 
 export function AppShell() {
   const router = useRouter();
@@ -173,6 +225,174 @@ export function AppShell() {
   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const appShellRef = useRef<HTMLDivElement>(null);
+  const sidebarContainerRef = useRef<HTMLDivElement>(null);
+  const rightPanelContainerRef = useRef<HTMLDivElement>(null);
+  const activePanelResizeRef = useRef<ActivePanelResize | null>(null);
+  const resizeAnimationFrameRef = useRef<number | null>(null);
+  const [resizingPanel, setResizingPanel] = useState<ResizingPanel | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [rightPanelWidth, setRightPanelWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell) return;
+
+    const viewportWidth = shell.getBoundingClientRect().width;
+    const defaultRightPanelWidth = Math.max(
+      RIGHT_PANEL_RESIZE_CONFIG.minWidth,
+      Math.min(
+        RIGHT_PANEL_RESIZE_CONFIG.maxWidth,
+        Math.round(viewportWidth * DEFAULT_RIGHT_PANEL_WIDTH_RATIO),
+      ),
+    );
+    const sidebarWidth = parseStoredPanelWidth(
+      window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY),
+      DEFAULT_SIDEBAR_WIDTH,
+      SIDEBAR_RESIZE_CONFIG,
+    );
+    const rightPanelWidth = parseStoredPanelWidth(
+      window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY),
+      defaultRightPanelWidth,
+      RIGHT_PANEL_RESIZE_CONFIG,
+    );
+
+    setSidebarWidth(sidebarWidth);
+    setRightPanelWidth(rightPanelWidth);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resizeAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(resizeAnimationFrameRef.current);
+      }
+    };
+  }, []);
+
+  const handlePanelResizeStart = useCallback((
+    side: ResizingPanel,
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.button !== 0 || isMobile) return;
+
+    const shell = appShellRef.current;
+    const panel = side === "left" ? sidebarContainerRef.current : rightPanelContainerRef.current;
+    const otherPanel = side === "left" ? rightPanelContainerRef.current : sidebarContainerRef.current;
+    if (!shell || !panel) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const config = side === "left" ? SIDEBAR_RESIZE_CONFIG : RIGHT_PANEL_RESIZE_CONFIG;
+    const currentWidth = panel.getBoundingClientRect().width;
+    const otherPanelOpen = side === "left" ? rightPanelOpen : sidebarOpen;
+    const otherPanelWidth = otherPanelOpen && otherPanel
+      ? otherPanel.getBoundingClientRect().width
+      : 0;
+    const availableMaxWidth = getAvailablePanelMaxWidth(
+      shell.getBoundingClientRect().width,
+      otherPanelWidth,
+      CENTER_MIN_WIDTH,
+      config,
+    );
+    const maxWidth = Math.max(currentWidth, availableMaxWidth);
+    const dragProperty = side === "left" ? "--sidebar-drag-width" : "--right-panel-drag-width";
+
+    activePanelResizeRef.current = {
+      side,
+      pointerId: event.pointerId,
+      currentWidth,
+      maxWidth,
+    };
+    shell.style.setProperty(dragProperty, `${currentWidth}px`);
+    setResizingPanel(side);
+  }, [isMobile, rightPanelOpen, sidebarOpen]);
+
+  const handlePanelResizeMove = useCallback((event: Pick<PointerEvent, "clientX" | "pointerId">) => {
+    const activeResize = activePanelResizeRef.current;
+    const shell = appShellRef.current;
+    if (!activeResize || !shell || event.pointerId !== activeResize.pointerId) return;
+
+    const shellRect = shell.getBoundingClientRect();
+    const rawWidth = activeResize.side === "left"
+      ? event.clientX - shellRect.left
+      : shellRect.right - event.clientX;
+    activeResize.currentWidth = clampPanelDragWidth(rawWidth, activeResize.maxWidth);
+
+    if (resizeAnimationFrameRef.current !== null) return;
+    resizeAnimationFrameRef.current = requestAnimationFrame(() => {
+      resizeAnimationFrameRef.current = null;
+      const currentResize = activePanelResizeRef.current;
+      const currentShell = appShellRef.current;
+      if (!currentResize || !currentShell) return;
+      const dragProperty = currentResize.side === "left"
+        ? "--sidebar-drag-width"
+        : "--right-panel-drag-width";
+      currentShell.style.setProperty(dragProperty, `${currentResize.currentWidth}px`);
+    });
+  }, []);
+
+  const finishPanelResize = useCallback((
+    event: Pick<PointerEvent, "pointerId">,
+    commit: boolean,
+  ) => {
+    const activeResize = activePanelResizeRef.current;
+    const shell = appShellRef.current;
+    if (!activeResize || !shell || event.pointerId !== activeResize.pointerId) return;
+
+    if (resizeAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(resizeAnimationFrameRef.current);
+      resizeAnimationFrameRef.current = null;
+    }
+
+    const side = activeResize.side;
+    const dragProperty = side === "left" ? "--sidebar-drag-width" : "--right-panel-drag-width";
+    if (!commit) {
+      activePanelResizeRef.current = null;
+      setResizingPanel(null);
+      shell.style.removeProperty(dragProperty);
+      return;
+    }
+
+    const config = side === "left" ? SIDEBAR_RESIZE_CONFIG : RIGHT_PANEL_RESIZE_CONFIG;
+    const result = settlePanelResize(activeResize.currentWidth, activeResize.maxWidth, config);
+    activePanelResizeRef.current = null;
+    setResizingPanel(null);
+
+    if (!result.open) {
+      if (side === "left") setSidebarOpen(false);
+      else setRightPanelOpen(false);
+      requestAnimationFrame(() => shell.style.removeProperty(dragProperty));
+      return;
+    }
+
+    const widthProperty = side === "left" ? "--sidebar-width" : "--right-panel-width";
+    const storageKey = side === "left" ? SIDEBAR_WIDTH_STORAGE_KEY : RIGHT_PANEL_WIDTH_STORAGE_KEY;
+    if (side === "left") setSidebarWidth(result.width);
+    else setRightPanelWidth(result.width);
+    shell.style.setProperty(widthProperty, `${result.width}px`);
+    shell.style.removeProperty(dragProperty);
+    window.localStorage.setItem(storageKey, String(result.width));
+  }, []);
+
+  const handlePanelResizeEnd = useCallback((event: PointerEvent) => {
+    finishPanelResize(event, true);
+  }, [finishPanelResize]);
+
+  const handlePanelResizeCancel = useCallback((event: PointerEvent) => {
+    finishPanelResize(event, false);
+  }, [finishPanelResize]);
+
+  useEffect(() => {
+    window.addEventListener("pointermove", handlePanelResizeMove);
+    window.addEventListener("pointerup", handlePanelResizeEnd);
+    window.addEventListener("pointercancel", handlePanelResizeCancel);
+    return () => {
+      window.removeEventListener("pointermove", handlePanelResizeMove);
+      window.removeEventListener("pointerup", handlePanelResizeEnd);
+      window.removeEventListener("pointercancel", handlePanelResizeCancel);
+    };
+  }, [handlePanelResizeCancel, handlePanelResizeEnd, handlePanelResizeMove]);
 
   // Same @mention format as the chat input's @ autocomplete, so the agent's
   // read tool resolves it the same way (it strips the @ prefix).
@@ -700,7 +920,22 @@ export function AppShell() {
         }
       }
     `}</style>
-    <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: "var(--bg)" }}>
+    <div
+      ref={appShellRef}
+      className={`app-shell${resizingPanel ? ` panel-resizing-${resizingPanel}` : ""}`}
+      style={{
+        "--sidebar-width": `${sidebarWidth}px`,
+        "--sidebar-min-width": `${SIDEBAR_RESIZE_CONFIG.minWidth}px`,
+        "--right-panel-width": rightPanelWidth === null
+          ? `clamp(${RIGHT_PANEL_RESIZE_CONFIG.minWidth}px, ${DEFAULT_RIGHT_PANEL_WIDTH_RATIO * 100}vw, ${RIGHT_PANEL_RESIZE_CONFIG.maxWidth}px)`
+          : `${rightPanelWidth}px`,
+        "--right-panel-min-width": `${RIGHT_PANEL_RESIZE_CONFIG.minWidth}px`,
+        display: "flex",
+        height: "100dvh",
+        overflow: "hidden",
+        background: "var(--bg)",
+      } as React.CSSProperties}
+    >
       {/* Mobile overlay backdrop */}
       <div
         className={`sidebar-overlay-backdrop${mobileSidebarReady ? "" : " sidebar-mobile-pending"}`}
@@ -718,6 +953,7 @@ export function AppShell() {
 
       {/* Left sidebar */}
       <div
+        ref={sidebarContainerRef}
         className={`sidebar-container${sidebarOpen ? " sidebar-open" : " sidebar-closed"}${mobileSidebarReady ? "" : " sidebar-mobile-pending"}`}
         style={{
           background: "var(--bg-panel)",
@@ -730,6 +966,13 @@ export function AppShell() {
       >
         {sidebarContent}
       </div>
+      {sidebarOpen && (
+        <PanelResizeHandle
+          side="left"
+          label={translate("sidebar.resize")}
+          onPointerDown={handlePanelResizeStart}
+        />
+      )}
 
       {/* Center: chat */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
@@ -1445,8 +1688,17 @@ export function AppShell() {
         </div>
       </div>
 
+      {rightPanelOpen && (
+        <PanelResizeHandle
+          side="right"
+          label={translate("files.resizePanel")}
+          onPointerDown={handlePanelResizeStart}
+        />
+      )}
+
       {/* Right panel: file viewer — always mounted, width animated via CSS */}
       <div
+        ref={rightPanelContainerRef}
         className={`right-panel-container${rightPanelOpen ? " right-panel-open" : " right-panel-closed"}`}
         style={{
           display: "flex",
