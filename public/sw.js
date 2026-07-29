@@ -54,14 +54,29 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const isStaticAsset =
-    url.pathname.startsWith("/_next/static/") ||
-    PRECACHE_URLS.includes(url.pathname);
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
 
-  if (isStaticAsset) {
+  if (PRECACHE_URLS.includes(url.pathname)) {
     event.respondWith(cacheFirst(request));
   }
 });
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok && response.type === "basic") {
+      const cache = await caches.open(STATIC_CACHE);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    return cached ?? Response.error();
+  }
+}
 
 async function cacheFirst(request) {
   const cached = await caches.match(request);
