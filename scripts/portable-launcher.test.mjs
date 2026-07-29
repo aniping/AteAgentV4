@@ -38,7 +38,9 @@ test("portable package rejects invalid launch values", () => {
 test("portable startup exposes the bundled npm tools to child processes", async () => {
   const startScript = await readFile(new URL("./portable-start.cmd", import.meta.url), "utf8");
 
-  assert.match(startScript, /set "PATH=%~dp0runtime;%PATH%"/);
+  assert.match(startScript, /set "PATH=%~dp0runtime\\node;%PATH%"/);
+  assert.match(startScript, /"%~dp0ATE-Agent\.exe" %\*/);
+  assert.doesNotMatch(startScript, /runtime\\node\\node\.exe/);
 });
 
 test("Windows package builds an ATE Agent NSIS installer", async () => {
@@ -48,24 +50,37 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
     readFile(new URL("./package-installer.cjs", import.meta.url), "utf8"),
     readFile(new URL("./windows-installer.nsi", import.meta.url), "utf8"),
     readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8"),
-    readFile(new URL("./stop-installed-server.cs", import.meta.url), "utf8"),
+    readFile(new URL("./stop-all-server.cs", import.meta.url), "utf8"),
   ]);
 
   assert.equal(JSON.parse(packageJson).scripts.package, "scripts\\package-installer.cmd");
   assert.match(packageCommand, /node\.exe?"? "%~dp0package-installer\.cjs"/i);
   assert.match(packageScript, /ATE-Agent-Setup-/);
   assert.match(packageScript, /removeRedundantNestedPackage/);
+  assert.match(packageScript, /pruneInstallerPayload/);
   assert.match(packageScript, /makensis/i);
   assert.match(installerScript, /WriteUninstaller/);
   assert.match(installerScript, /InstallDir "\$PROGRAMFILES64\\ATEAgent"/);
   assert.match(installerScript, /CreateShortcut[^\r\n]+ATE-Agent\.exe/);
   assert.match(installerScript, /RequestExecutionLevel admin/);
-  assert.match(installerScript, /stop-installed-server\.exe/);
+  assert.match(installerScript, /stop-all-server\.exe/);
+  assert.match(installerScript, /RMDir \/r "\$INSTDIR\\app"/);
+  assert.match(installerScript, /RMDir \/r "\$INSTDIR\\runtime"/);
   assert.doesNotMatch(installerScript, /[^\x00-\x7F]/);
   assert.match(packageScript, /win32icon/i);
-  assert.match(launcherSource, /runtime[\\]node\.exe/);
+  assert.match(launcherSource, /runtime[\\]node[\\]node\.exe/);
+  assert.match(launcherSource, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
+  assert.match(launcherSource, /CREATE_SUSPENDED/);
+  assert.match(launcherSource, /CreateProcess/);
+  assert.match(launcherSource, /AssignProcessToJobObject/);
+  assert.match(launcherSource, /ResumeThread/);
+  assert.match(launcherSource, /WaitForSingleObject/);
+  assert.match(stopSource, /ATE-Agent\.exe/);
+  assert.match(stopSource, /runtime[\\]node[\\]node\.exe/);
+  assert.match(stopSource, /AppDomain\.CurrentDomain\.BaseDirectory/);
   assert.match(stopSource, /MainModule\.FileName/);
-  assert.match(stopSource, /process\.Kill\(\)/);
+  assert.match(stopSource, /\/T/);
+  assert.match(packageScript, /app\/node_modules\/@earendil-works\/pi-coding-agent\/package\.json/);
   assert.doesNotMatch(
     [packageJson, packageCommand, packageScript, installerScript, launcherSource, stopSource].join("\n"),
     /pwsh|powershell|\.ps1/i,

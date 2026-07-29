@@ -73,6 +73,11 @@ Function .onVerifyInstDir
 FunctionEnd
 
 Function StopATEAgent
+  IfFileExists "$INSTDIR\stop-all-server.exe" use_current use_legacy
+  use_current:
+  ExecWait '"$INSTDIR\stop-all-server.exe" "$INSTDIR"'
+  Goto done
+  use_legacy:
   IfFileExists "$INSTDIR\stop-installed-server.exe" 0 done
   ExecWait '"$INSTDIR\stop-installed-server.exe" "$INSTDIR"'
   Sleep 500
@@ -85,6 +90,9 @@ Section "ATE Agent" SecMain
   SetShellVarContext all
   SetRegView 64
 
+  Delete "$INSTDIR\stop-installed-server.exe"
+  RMDir /r "$INSTDIR\app"
+  RMDir /r "$INSTDIR\runtime"
   SetOutPath "$INSTDIR"
   File /r "${SOURCE_ROOT}\*"
 
@@ -121,6 +129,11 @@ Section "Uninstall"
 SectionEnd
 
 Function un.StopATEAgent
+  IfFileExists "$INSTDIR\stop-all-server.exe" use_current use_legacy
+  use_current:
+  ExecWait '"$INSTDIR\stop-all-server.exe" "$INSTDIR"'
+  Goto done
+  use_legacy:
   IfFileExists "$INSTDIR\stop-installed-server.exe" 0 done
   ExecWait '"$INSTDIR\stop-installed-server.exe" "$INSTDIR"'
   Sleep 500
