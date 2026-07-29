@@ -12,6 +12,9 @@ const repoRoot = path.resolve(__dirname, "..");
 const buildRoot = path.join(repoRoot, "build");
 const releaseRoot = path.join(buildRoot, "release");
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+const agentPackageJson = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"), "utf8"),
+);
 
 function run(executable, args, options = {}) {
   const result = spawnSync(executable, args, {
@@ -83,6 +86,11 @@ async function createWindowsIcon(svgPath, destination) {
   fs.writeFileSync(destination, Buffer.concat([directory, ...images]));
 }
 
+async function createWindowsPng(svgPath, destination, size) {
+  const sharp = require("sharp");
+  await sharp(svgPath).resize(size, size).png().toFile(destination);
+}
+
 function removeRedundantNestedPackage(topLevelPackage, nestedPackage) {
   if (!fs.existsSync(nestedPackage)) return;
   if (!fs.existsSync(topLevelPackage)) {
@@ -148,6 +156,14 @@ function findExecutable(candidates, name) {
   return null;
 }
 
+function toWindowsVersion(version) {
+  const versionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!versionMatch) {
+    throw new Error(`Package version cannot be converted to a Windows four-part version: ${version}`);
+  }
+  return `${versionMatch[1]}.${versionMatch[2]}.${versionMatch[3]}.0`;
+}
+
 async function main() {
   if (process.platform !== "win32") {
     throw new Error(`Windows installers must be built on Windows; current platform is ${process.platform}.`);
@@ -155,6 +171,8 @@ async function main() {
   if (!new Set(["x64", "arm64"]).has(process.arch)) {
     throw new Error(`Unsupported Windows installer architecture: ${process.arch}`);
   }
+
+  const windowsVersion = toWindowsVersion(packageJson.version);
 
   const artifactName = `ate-agent-${packageJson.version}-win-${process.arch}`;
   const installerName = `ATE-Agent-Setup-${packageJson.version}-win-${process.arch}`;
@@ -166,12 +184,14 @@ async function main() {
   const nodeChecksumsPath = path.join(nodeCacheRoot, "SHASUMS256.txt");
   const nodeExpandedRoot = path.join(nodeCacheRoot, "expanded");
   const nodeDistributionRoot = path.join(nodeExpandedRoot, path.parse(nodeArchiveName).name);
-
-  for (const target of [stagingRoot, installerPath, nodeCacheRoot]) assertPathUnderBuildRoot(target);
+  const metadataRoot = path.join(buildRoot, "installer", `${artifactName}-metadata`);
+  for (const target of [stagingRoot, installerPath, nodeCacheRoot, metadataRoot]) assertPathUnderBuildRoot(target);
   fs.mkdirSync(releaseRoot, { recursive: true });
   fs.mkdirSync(nodeCacheRoot, { recursive: true });
   fs.rmSync(stagingRoot, { recursive: true, force: true });
+  fs.rmSync(metadataRoot, { recursive: true, force: true });
   fs.rmSync(installerPath, { force: true });
+  fs.mkdirSync(metadataRoot, { recursive: true });
 
   const preloadPath = path.join(__dirname, "portable-build-preload.cjs").replaceAll("\\", "/");
   const buildEnv = {
@@ -226,6 +246,8 @@ async function main() {
 
   const appRoot = path.join(stagingRoot, "app");
   const nodeRuntimeRoot = path.join(stagingRoot, "runtime", "node");
+  const supportRoot = path.join(stagingRoot, "support");
+  fs.mkdirSync(supportRoot, { recursive: true });
   copyContents(standaloneRoot, appRoot);
   copyContents(staticRoot, path.join(appRoot, ".next", "static"));
   const publicRoot = path.join(repoRoot, "public");
@@ -246,12 +268,17 @@ async function main() {
 
   copyContents(nodeDistributionRoot, nodeRuntimeRoot);
   pruneInstallerPayload(appRoot, nodeRuntimeRoot);
-  fs.copyFileSync(path.join(__dirname, "portable-launcher.cjs"), path.join(stagingRoot, "launcher.cjs"));
+  fs.copyFileSync(path.join(__dirname, "portable-launcher.cjs"), path.join(supportRoot, "launcher.cjs"));
   fs.copyFileSync(path.join(__dirname, "portable-start.cmd"), path.join(stagingRoot, "start.cmd"));
   fs.writeFileSync(path.join(nodeRuntimeRoot, "NODE-VERSION.txt"), `${process.version}\r\n`, "utf8");
 
-  const appIconPath = path.join(stagingRoot, "ate-agent.ico");
-  await createWindowsIcon(path.join(__dirname, "ate-agent-icon.svg"), appIconPath);
+  const appIconPath = path.join(metadataRoot, "ate-agent.ico");
+  const brandImagePath = path.join(metadataRoot, "ate-agent-brand.png");
+  const iconSourcePath = path.join(__dirname, "ate-agent-icon.svg");
+  await Promise.all([
+    createWindowsIcon(iconSourcePath, appIconPath),
+    createWindowsPng(iconSourcePath, brandImagePath, 128),
+  ]);
 
   const csc = findExecutable(
     [
@@ -266,18 +293,35 @@ async function main() {
     "/nologo",
     "/target:winexe",
     "/optimize+",
+    "/reference:System.Management.dll",
     `/out:${stopHelperPath}`,
     path.join(__dirname, "stop-all-server.cs"),
   ]);
   const launcherPath = path.join(stagingRoot, "ATE-Agent.exe");
+  const launcherVersionSource = path.join(metadataRoot, "ate-agent-version.cs");
+  fs.writeFileSync(
+    launcherVersionSource,
+    `using System.Reflection;\r\n[assembly: AssemblyVersion("${windowsVersion}")]\r\n` +
+      `[assembly: AssemblyFileVersion("${windowsVersion}")]\r\n` +
+      `[assembly: AssemblyInformationalVersion("${packageJson.version}")]\r\n` +
+      `internal static class BuildVersions\r\n{\r\n` +
+      `    internal const string Agent = ${JSON.stringify(agentPackageJson.version)};\r\n` +
+      `    internal const string Ui = ${JSON.stringify(packageJson.version)};\r\n` +
+      `}\r\n`,
+    "utf8",
+  );
   run(csc, [
     "/nologo",
     "/target:winexe",
     "/optimize+",
     "/reference:System.Windows.Forms.dll",
+    "/reference:System.Drawing.dll",
     `/win32icon:${appIconPath}`,
+    `/win32manifest:${path.join(__dirname, "ate-agent-app.manifest")}`,
+    `/resource:${brandImagePath},ATE.Agent.Brand.png`,
     `/out:${launcherPath}`,
     path.join(__dirname, "ate-agent-launcher.cs"),
+    launcherVersionSource,
   ]);
 
   const packageReadme = `ATE Agent ${packageJson.version} Windows ${process.arch}\r\n\r\n` +
@@ -294,10 +338,9 @@ async function main() {
 
   const requiredFiles = [
     "ATE-Agent.exe",
-    "ate-agent.ico",
     "start.cmd",
-    "launcher.cjs",
     "stop-all-server.exe",
+    "support/launcher.cjs",
     "runtime/node/node.exe",
     "runtime/node/npm.cmd",
     "runtime/node/npx.cmd",
@@ -345,11 +388,6 @@ async function main() {
     throw new Error("NSIS 3 is required. Install it with: winget install --id NSIS.NSIS -e");
   }
 
-  const versionMatch = /^(\d+)\.(\d+)\.(\d+)/.exec(packageJson.version);
-  if (!versionMatch) {
-    throw new Error(`Package version cannot be converted to a Windows file version: ${packageJson.version}`);
-  }
-  const windowsVersion = `${versionMatch[1]}.${versionMatch[2]}.${versionMatch[3]}.0`;
   run(makensis, [
     "/V2",
     `/DAPP_VERSION=${packageJson.version}`,

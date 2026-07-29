@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Management;
 
 internal static class StopAllServer
 {
@@ -41,6 +42,41 @@ internal static class StopAllServer
             finally
             {
                 process.Dispose();
+            }
+        }
+
+        StopProcessesWithWmi(processName + ".exe", expectedPath);
+    }
+
+    private static void StopProcessesWithWmi(string processName, string expectedPath)
+    {
+        string escapedName = processName.Replace("'", "''");
+        using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
+            "SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = '" + escapedName + "'"))
+        using (ManagementObjectCollection processes = searcher.Get())
+        {
+            foreach (ManagementObject process in processes)
+            {
+                using (process)
+                {
+                    try
+                    {
+                        string executable = process["ExecutablePath"] as string;
+                        if (string.IsNullOrEmpty(executable) ||
+                            !string.Equals(Path.GetFullPath(executable), expectedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        int processId = Convert.ToInt32((uint)process["ProcessId"]);
+                        KillProcessTree(processId);
+                        process.InvokeMethod("Terminate", new object[] { 0 });
+                    }
+                    catch
+                    {
+                        // The process may have exited after taskkill completed.
+                    }
+                }
             }
         }
     }

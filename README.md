@@ -15,9 +15,13 @@ ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基�
 ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
-安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。快捷方式启动带有 ATE Agent 红色图标的 `ATE-Agent.exe`；它会在服务运行期间保持常驻，结束该进程会同步结束其 Node 和工具子进程。`start.cmd` 仅作为兼容入口保留；也可以双击安装目录中的 `stop-all-server.exe` 停止全部相关进程。
+安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。安装完成、双击带有红色图标的 `ATE-Agent.exe` 或快捷方式时都会显示 ATE Agent 状态主界面，不会自动打开网页；已经运行时再次双击只会唤醒主界面，不会重复启动 Node。
 
-内置运行时按类型放置在 `runtime` 下；当前 Node.js 位于 `runtime\node`，以后增加其他运行时不会与 Node.js 文件混放。安装新版时会完整替换内置 Node.js 和应用目录，因此可以随发布包升级 Node.js 与 pi 版本；用户 `.pi` 目录中的会话、Skill、插件和配置不会被覆盖。
+`ATE-Agent.exe` 会在服务运行期间保持常驻。状态主窗口分别显示 Agent 与 UI 版本，用户点击“打开 ATE Agent 工作台”后才会打开网页。双击托盘红色图标会显示主窗口；托盘右键可以打开网页、显示运行状态、重启服务或退出。显示主窗口时，带红色图标的任务栏项会同时出现；关闭窗口会将它隐藏回托盘并移除任务栏项，但不会停止服务。结束 `ATE-Agent.exe` 会同步结束其 Node 和工具子进程。`start.cmd` 仅作为兼容入口保留；也可以双击安装目录中的 `stop-all-server.exe` 停止全部相关进程。
+
+内置运行时按类型放置在 `runtime` 下；当前 Node.js 位于 `runtime\node`，以后增加其他运行时不会与 Node.js 文件混放。覆盖升级、同版本修复安装和回退到旧版都会替换内置 Node.js 与应用目录，因此 Node.js 和 Agent 会切换为目标安装包所带版本；用户 `.pi` 目录中的会话、Skill、插件和配置不会被覆盖。
+
+安装目录按用途划分：根目录只保留启动、停止、卸载和说明入口；`app` 存放 Web 应用，`runtime\node` 存放 Node.js，`support` 存放启动器内部文件。构建阶段使用的独立 ICO 文件不会安装到目标电脑。
 
 安装完成后双击 **ATE Agent** 快捷方式，本机浏览器访问：
 

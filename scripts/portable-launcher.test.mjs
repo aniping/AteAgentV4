@@ -66,23 +66,98 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
   assert.match(installerScript, /stop-all-server\.exe/);
   assert.match(installerScript, /RMDir \/r "\$INSTDIR\\app"/);
   assert.match(installerScript, /RMDir \/r "\$INSTDIR\\runtime"/);
+  assert.match(installerScript, /RMDir \/r "\$INSTDIR\\support"/);
+  assert.match(installerScript, /MUI_FINISHPAGE_RUN "\$INSTDIR\\ATE-Agent\.exe"/);
+  assert.doesNotMatch(installerScript, /MUI_FINISHPAGE_RUN_NOTCHECKED/);
   assert.doesNotMatch(installerScript, /[^\x00-\x7F]/);
   assert.match(packageScript, /win32icon/i);
+  assert.match(packageScript, /System\.Drawing\.dll/);
   assert.match(launcherSource, /runtime[\\]node[\\]node\.exe/);
+  assert.match(launcherSource, /support[\\]launcher\.cjs/);
   assert.match(launcherSource, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
   assert.match(launcherSource, /CREATE_SUSPENDED/);
   assert.match(launcherSource, /CreateProcess/);
   assert.match(launcherSource, /AssignProcessToJobObject/);
   assert.match(launcherSource, /ResumeThread/);
   assert.match(launcherSource, /WaitForSingleObject/);
+  assert.match(launcherSource, /Application\.Run/);
+  assert.match(launcherSource, /NotifyIcon/);
+  assert.match(launcherSource, /MouseDoubleClick/);
+  assert.match(launcherSource, /OpenWebInterface/);
+  assert.match(launcherSource, /OpenWebInterfaceWhenReady/);
+  assert.match(launcherSource, /SingleInstance/);
+  assert.match(launcherSource, /ShowStatusSignal/);
+  assert.match(launcherSource, /RestartServer/);
+  assert.match(launcherSource, /ShowStatusWindow/);
+  assert.match(launcherSource, /SetCurrentProcessExplicitAppUserModelID/);
+  assert.match(launcherSource, /AssemblyTitle\("ATE Agent"\)/);
+  assert.match(launcherSource, /AssemblyProduct\("ATE Agent"\)/);
+  assert.doesNotMatch(launcherSource, /WaitForSingleObject\(process\.hProcess, INFINITE\)/);
   assert.match(stopSource, /ATE-Agent\.exe/);
   assert.match(stopSource, /runtime[\\]node[\\]node\.exe/);
   assert.match(stopSource, /AppDomain\.CurrentDomain\.BaseDirectory/);
   assert.match(stopSource, /MainModule\.FileName/);
   assert.match(stopSource, /\/T/);
+  assert.match(stopSource, /ManagementObjectSearcher/);
+  assert.match(stopSource, /InvokeMethod\("Terminate"/);
+  assert.match(packageScript, /System\.Management\.dll/);
   assert.match(packageScript, /app\/node_modules\/@earendil-works\/pi-coding-agent\/package\.json/);
+  assert.match(packageScript, /support\/launcher\.cjs/);
   assert.doesNotMatch(
     [packageJson, packageCommand, packageScript, installerScript, launcherSource, stopSource].join("\n"),
     /pwsh|powershell|\.ps1/i,
   );
+});
+
+test("ATE Agent starts with its status window and hides to the tray when closed", async () => {
+  const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
+
+  assert.match(launcherSource, /LauncherForm\s*:\s*Form/);
+  assert.match(launcherSource, /Application\.Run\(form\)/);
+  assert.doesNotMatch(launcherSource, /OnLoad\(EventArgs e\)\s*\{[^}]*HideToTray\(\)/);
+  assert.doesNotMatch(launcherSource, /OnLoad\(EventArgs e\)\s*\{[^}]*OpenWebInterface/);
+  assert.match(launcherSource, /ShowInTaskbar\s*=\s*true/);
+  assert.match(launcherSource, /ShowStatusWindow\(\)[\s\S]*?Show\(\)/);
+  assert.match(launcherSource, /HideToTray\(\)[\s\S]*?Hide\(\)/);
+  assert.doesNotMatch(launcherSource, /HideToTray\(\)[\s\S]*?ShowInTaskbar\s*=\s*false/);
+  assert.match(launcherSource, /FormClosing/);
+  assert.match(launcherSource, /e\.Cancel\s*=\s*true/);
+  assert.doesNotMatch(launcherSource, /ApplicationContext/);
+  assert.match(launcherSource, /OnShowStatusSignal[\s\S]*?ShowStatusWindow\(\)/);
+  assert.doesNotMatch(launcherSource, /OnOpenWebSignal/);
+});
+
+test("ATE Agent binds a ContextMenuStrip to its tray icon", async () => {
+  const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
+
+  assert.match(launcherSource, /new ContextMenuStrip\(\)/);
+  assert.match(launcherSource, /ContextMenuStrip\s*=\s*menu/);
+  assert.match(launcherSource, /MouseDoubleClick[\s\S]*?ShowStatusWindow\(\)/);
+  assert.doesNotMatch(launcherSource, /MouseUp/);
+  assert.doesNotMatch(launcherSource, /new ContextMenu\(\)/);
+});
+
+test("ATE Agent status window shows separate Agent and UI versions", async () => {
+  const [launcherSource, packageScript] = await Promise.all([
+    readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8"),
+    readFile(new URL("./package-installer.cjs", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(launcherSource, /AGENT\s+v" \+ BuildVersions\.Agent/);
+  assert.match(launcherSource, /UI\s+v" \+ BuildVersions\.Ui/);
+  assert.match(packageScript, /internal const string Agent/);
+  assert.match(packageScript, /internal const string Ui/);
+  assert.match(packageScript, /agentPackageJson\.version/);
+  assert.match(packageScript, /ATE\.Agent\.Brand\.png/);
+  assert.match(launcherSource, /GetManifestResourceStream\("ATE\.Agent\.Brand\.png"\)/);
+});
+
+test("ATE Agent opens the browser without blocking its UI thread", async () => {
+  const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
+
+  assert.match(launcherSource, /LinkClicked[\s\S]*?OpenWebInterfaceWhenReady\(\)/);
+  assert.match(launcherSource, /SpecialFolder\.Windows/);
+  assert.match(launcherSource, /explorer\.exe/);
+  assert.match(launcherSource, /UseShellExecute\s*=\s*false/);
+  assert.doesNotMatch(launcherSource, /BeginInvoke\(\(MethodInvoker\)delegate\s*\{\s*OpenWebInterface\(\)/);
 });
