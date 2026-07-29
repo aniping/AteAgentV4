@@ -274,7 +274,7 @@ async function main() {
 
   const appIconPath = path.join(metadataRoot, "ate-agent.ico");
   const brandImagePath = path.join(metadataRoot, "ate-agent-brand.png");
-  const iconSourcePath = path.join(__dirname, "ate-agent-icon.svg");
+  const iconSourcePath = path.join(repoRoot, "app", "icon.svg");
   await Promise.all([
     createWindowsIcon(iconSourcePath, appIconPath),
     createWindowsPng(iconSourcePath, brandImagePath, 128),
