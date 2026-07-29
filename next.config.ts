@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { MAX_SKILL_UPLOAD_REQUEST_BYTES } from "./lib/skill-archive-limits";
 
 const { version } = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")) as { version: string };
 const standaloneBuild = process.env.PI_WEB_STANDALONE === "1";
@@ -18,7 +19,7 @@ const nextConfig: NextConfig = {
     },
   } : {}),
   experimental: {
-    proxyClientMaxBodySize: 52 * 1024 * 1024,
+    proxyClientMaxBodySize: MAX_SKILL_UPLOAD_REQUEST_BYTES,
   },
   serverExternalPackages: [
     "undici",

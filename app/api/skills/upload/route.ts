@@ -10,11 +10,15 @@ import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 import { hasUsableMcpAdapter, isMcpAdapterSource, MCP_ADAPTER_SOURCE } from "@/lib/mcp-adapter";
 import {
-  MAX_SKILL_ARCHIVE_BYTES,
   parseSkillArchive,
   SkillArchiveConflictError,
   SkillArchiveError,
 } from "@/lib/skill-archive";
+import {
+  MAX_SKILL_ARCHIVE_BYTES,
+  MAX_SKILL_ARCHIVE_LABEL,
+  MAX_SKILL_UPLOAD_REQUEST_BYTES,
+} from "@/lib/skill-archive-limits";
 import {
   installSkillArchive,
   type SkillArchiveInstallScope,
@@ -24,7 +28,6 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_UPLOAD_REQUEST_BYTES = MAX_SKILL_ARCHIVE_BYTES + 2 * 1024 * 1024;
 function isMultipartRequest(request: Request): boolean {
   return request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() === "multipart/form-data";
 }
@@ -40,10 +43,10 @@ export async function POST(request: Request) {
   try {
     let form: FormData;
     try {
-      form = await parseFormDataWithinLimit(request, MAX_UPLOAD_REQUEST_BYTES);
+      form = await parseFormDataWithinLimit(request, MAX_SKILL_UPLOAD_REQUEST_BYTES);
     } catch (error) {
       if (error instanceof RequestBodyTooLargeError) {
-        return NextResponse.json({ error: "Skill ZIP must be 50MB or smaller" }, { status: 413 });
+        return NextResponse.json({ error: `Skill ZIP must be ${MAX_SKILL_ARCHIVE_LABEL} or smaller` }, { status: 413 });
       }
       throw error;
     }
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Skill archive filename must end in .zip" }, { status: 400 });
     }
     if (file.size > MAX_SKILL_ARCHIVE_BYTES) {
-      return NextResponse.json({ error: "Skill ZIP must be 50MB or smaller" }, { status: 413 });
+      return NextResponse.json({ error: `Skill ZIP must be ${MAX_SKILL_ARCHIVE_LABEL} or smaller` }, { status: 413 });
     }
     const scopeValue = form.get("scope");
     if (scopeValue !== "global" && scopeValue !== "project") {
