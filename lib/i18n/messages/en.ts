@@ -290,6 +290,7 @@ export const enLocale: LocalePlugin = {
     "i18n.creating": "Creating…",
     "i18n.subscription": "Subscription",
     "i18n.subscriptions": "Subscriptions",
+    "i18n.internalModels": "Internal models",
     "i18n.customEndpoint": "Custom endpoint format",
     "i18n.noChanges": "No changes",
     "i18n.branches": "Branches",

@@ -290,6 +290,7 @@ export const zhCNLocale: LocalePlugin = {
     "i18n.creating": "创建中…",
     "i18n.subscription": "订阅",
     "i18n.subscriptions": "订阅服务",
+    "i18n.internalModels": "内部模型",
     "i18n.customEndpoint": "自定义端点格式",
     "i18n.noChanges": "没有更改",
     "i18n.branches": "分支",
