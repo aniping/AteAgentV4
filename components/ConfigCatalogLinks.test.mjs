@@ -8,8 +8,8 @@ const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
   tsconfigPaths: true,
 });
-const { AddSkillPanel, SkillDetail } = await jiti.import("./SkillsConfig.tsx");
-const { AddPluginPanel } = await jiti.import("./PluginsConfig.tsx");
+const { AddSkillPanel, SkillDetail, SkillsConfig } = await jiti.import("./SkillsConfig.tsx");
+const { AddPluginPanel, PluginsConfig } = await jiti.import("./PluginsConfig.tsx");
 const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function withI18n(element) {
@@ -37,6 +37,9 @@ test("skill installation offers a generic ZIP upload", () => {
 
   assert.match(html, /Install from ZIP/);
   assert.match(html, /<input[^>]+type="file"[^>]+accept="\.zip,application\/zip"/);
+  assert.match(html, /Click to choose a ZIP file/);
+  assert.match(html, /or drag and drop it here/);
+  assert.match(html, />Choose ZIP first<\/button>/);
   assert.match(html, /exactly one SKILL\.md/);
 });
 
@@ -82,4 +85,21 @@ test("plugin installation links to the filtered Pi extension catalog", () => {
   }));
 
   assert.match(html, /Browse <a href="https:\/\/pi\.dev\/packages\?type=extension" target="_blank" rel="noreferrer"[^>]*>pi\.dev\/packages<\/a> to discover and install Pi plugins/);
+});
+
+test("skill and plugin dialogs expose add actions before their lists", () => {
+  const skillsHtml = withI18n(React.createElement(SkillsConfig, {
+    cwd: "C:/project",
+    onClose() {},
+  }));
+  const pluginsHtml = withI18n(React.createElement(PluginsConfig, {
+    cwd: "C:/project",
+    sessionId: null,
+    onClose() {},
+  }));
+
+  assert.match(skillsHtml, /<button[^>]+aria-pressed="false"[^>]*>.*Add skill<\/button>/s);
+  assert.match(pluginsHtml, /<button[^>]+aria-pressed="false"[^>]*>.*Add plugin<\/button>/s);
+  assert.ok(skillsHtml.indexOf("Add skill") < skillsHtml.indexOf("Loading..."));
+  assert.ok(pluginsHtml.indexOf("Add plugin") < pluginsHtml.indexOf("Loading..."));
 });
