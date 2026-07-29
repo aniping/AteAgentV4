@@ -7,6 +7,12 @@ import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
+import {
+  createPromptLocaleExtension,
+  localizeSystemPrompt,
+  normalizePromptLocale,
+  type PromptLocaleState,
+} from "./system-prompt";
 import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type { ExtensionUiRequest, ExtensionUiResponse, ExtensionWidgetItem } from "./types";
@@ -124,8 +130,15 @@ export class AgentSessionWrapper {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
   private _alive = true;
+  private sourceSystemPrompt: string;
 
-  constructor(public readonly inner: AgentSessionLike) {}
+  constructor(
+    public readonly inner: AgentSessionLike,
+    private readonly promptLocaleState: PromptLocaleState,
+  ) {
+    this.sourceSystemPrompt = inner.agent.state?.systemPrompt ?? "";
+    this.applySystemPromptLocale();
+  }
 
   get sessionId(): string {
     return this.inner.sessionId;
@@ -164,7 +177,13 @@ export class AgentSessionWrapper {
 
   setForceEmptySystemPrompt(force: boolean): void {
     this.forceEmptySystemPrompt = force;
+    this.promptLocaleState.forceEmpty = force;
     this.applyForcedEmptySystemPrompt();
+  }
+
+  setPromptLocale(locale: unknown): void {
+    this.promptLocaleState.current = normalizePromptLocale(locale);
+    this.applySystemPromptLocale();
   }
 
   beginExtensionBinding(options: ExtensionBindingOptions = {}): void {
@@ -255,9 +274,19 @@ export class AgentSessionWrapper {
   }
 
   private applyForcedEmptySystemPrompt(): void {
-    if (this.forceEmptySystemPrompt && this.inner.agent.state) {
-      this.inner.agent.state.systemPrompt = "";
-    }
+    this.applySystemPromptLocale();
+  }
+
+  private captureSourceSystemPrompt(): void {
+    this.sourceSystemPrompt = this.inner.agent.state?.systemPrompt ?? "";
+    this.applySystemPromptLocale();
+  }
+
+  private applySystemPromptLocale(): void {
+    if (!this.inner.agent.state) return;
+    this.inner.agent.state.systemPrompt = this.forceEmptySystemPrompt
+      ? ""
+      : localizeSystemPrompt(this.sourceSystemPrompt, this.promptLocaleState.current);
   }
 
   private emit(event: AgentEvent): void {
@@ -310,6 +339,9 @@ export class AgentSessionWrapper {
 
   async send(command: Record<string, unknown>): Promise<unknown> {
     this.resetIdleTimer();
+    if (command.promptLocale !== undefined) {
+      this.setPromptLocale(command.promptLocale);
+    }
     const type = command.type as string;
     if (this.shouldWaitForExtensions(type)) await this.waitForExtensionsBound();
 
@@ -381,6 +413,9 @@ export class AgentSessionWrapper {
           extensionWidgets: this.getExtensionWidgets(),
         };
       }
+
+      case "set_prompt_locale":
+        return { systemPrompt: this.inner.agent.state?.systemPrompt ?? "" };
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
@@ -549,7 +584,7 @@ export class AgentSessionWrapper {
         const toolNames = command.toolNames as string[];
         this.setForceEmptySystemPrompt(toolNames.length === 0);
         this.inner.setActiveToolsByName(withExtensionTools(this.inner, toolNames));
-        this.applyForcedEmptySystemPrompt();
+        this.captureSourceSystemPrompt();
         return null;
       }
 
@@ -562,7 +597,7 @@ export class AgentSessionWrapper {
         if (typeof this.inner.bindExtensions !== "function") {
           this.inner.extensionRunner.setUIContext?.(this.createExtensionUiContext(), "rpc");
         }
-        this.applyForcedEmptySystemPrompt();
+        this.captureSourceSystemPrompt();
         invalidateModelsCache();
         return { success: true };
       }
@@ -1097,13 +1132,17 @@ export async function startRpcSession(
   sessionId: string,
   sessionFile: string,
   cwd: string,
-  toolNames?: string[]
+  toolNames?: string[],
+  promptLocale?: unknown,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const registry = getRegistry();
   const locks = getLocks();
 
   const existing = registry.get(sessionId);
-  if (existing?.isAlive()) return { session: existing, realSessionId: sessionId };
+  if (existing?.isAlive()) {
+    if (promptLocale !== undefined) existing.setPromptLocale(promptLocale);
+    return { session: existing, realSessionId: sessionId };
+  }
 
   const inflight = locks.get(sessionId);
   if (inflight) return inflight;
@@ -1137,9 +1176,16 @@ export async function startRpcSession(
     // Gate untrusted project extensions so opening a repository does not run
     // its .pi/extensions code automatically (see lib/project-trust.ts, #236).
     const trustReloadOptions = projectTrustReloadOptions(cwd, agentDir);
+    const promptLocaleState: PromptLocaleState = {
+      current: normalizePromptLocale(promptLocale),
+      forceEmpty: toolNames?.length === 0,
+    };
     const services = await createAgentSessionServices({
       cwd,
       agentDir,
+      resourceLoaderOptions: {
+        extensionFactories: [createPromptLocaleExtension(promptLocaleState)],
+      },
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
     const { session: inner } = await createAgentSessionFromServices({
@@ -1155,7 +1201,7 @@ export async function startRpcSession(
       inner.setActiveToolsByName(withExtensionTools(inner, toolNames));
     }
 
-    const wrapper = new AgentSessionWrapper(inner);
+    const wrapper = new AgentSessionWrapper(inner, promptLocaleState);
     // When all tools are disabled, clear the system prompt entirely.
     // pi's buildSystemPrompt always produces a non-empty prompt even with no tools;
     // keep this forced after extension resource discovery and reloads as well.

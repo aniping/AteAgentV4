@@ -12,6 +12,7 @@ import type {
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { getToolNamesForPreset, type ToolEntry } from "@/lib/tool-presets";
+import type { Locale } from "@/lib/i18n/types";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 
 export interface SessionData {
@@ -141,6 +142,7 @@ export type BuiltinSlashCommandResult =
 export interface UseAgentSessionOptions {
   session: SessionInfo | null;
   newSessionCwd: string | null;
+  promptLocale: Locale;
   onAgentEnd?: () => void;
   onSessionCreated?: (session: SessionInfo) => void;
   onSessionForked?: (newSessionId: string) => void;
@@ -324,7 +326,7 @@ type SlashCommandsResponse = {
 export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, onSessionStatsPanelOpen,
+    modelsRefreshKey, promptLocale, onBranchDataChange, onSystemPromptChange, onSessionStatsPanelOpen,
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
@@ -387,6 +389,31 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const newSessionPromotedRef = useRef(false);
   const promptRunIdRef = useRef(0);
   const optimisticUserMessageKeyRef = useRef<string | null>(null);
+  const sendLocalizedPromptCommand = useCallback(<T = unknown>(
+    sid: string,
+    command: Record<string, unknown>,
+  ) => sendAgentCommand<T>(sid, { ...command, promptLocale }), [promptLocale]);
+
+  useEffect(() => {
+    const sid = sessionIdRef.current ?? session?.id;
+    if (!sid) return;
+
+    let cancelled = false;
+    void sendAgentCommand<{ systemPrompt?: string }>(sid, {
+      type: "set_prompt_locale",
+      promptLocale,
+    }).then((result) => {
+      if (!cancelled && result.systemPrompt !== undefined) {
+        setSystemPrompt(result.systemPrompt);
+      }
+    }).catch((error) => {
+      console.error("Failed to set system prompt locale:", error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [promptLocale, session?.id]);
 
   const setToolPresetState = opts.setToolPreset ?? setToolPreset;
 
@@ -553,6 +580,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           cwd: newSessionCwd,
           type: "ensure_session",
           toolNames,
+          promptLocale,
           ...(selectedModel ? { provider: selectedModel.provider, modelId: selectedModel.modelId } : {}),
           ...(thinkingLevel !== "auto" ? { thinkingLevel } : {}),
         }),
@@ -570,7 +598,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } finally {
       ensuringNewSessionRef.current = null;
     }
-  }, [isNew, newSessionCwd, newSessionModel, newSessionDefaultModel, toolPreset, thinkingLevel]);
+  }, [isNew, newSessionCwd, newSessionModel, newSessionDefaultModel, toolPreset, thinkingLevel, promptLocale]);
 
   const loadSlashCommands = useCallback(async () => {
     const sid = sessionIdRef.current ?? await ensureNewSession();
@@ -1089,7 +1117,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             }
           }
           await ensureEventsConnected(sid);
-          await sendAgentCommand(sid, {
+          await sendLocalizedPromptCommand(sid, {
             type: "prompt",
             message,
             ...(piImages?.length ? { images: piImages } : {}),
@@ -1099,7 +1127,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       } else if (session) {
         sentSessionId = session.id;
         await ensureEventsConnected(session.id);
-        await sendAgentCommand(session.id, {
+        await sendLocalizedPromptCommand(session.id, {
           type: "prompt",
           message,
           ...(piImages?.length ? { images: piImages } : {}),
@@ -1132,7 +1160,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setAgentPhase(null);
       dispatch({ type: "end" });
     }
-  }, [isNew, newSessionCwd, newSessionModel, session, ensureNewSession, ensureEventsConnected, promoteNewSession, waitForPromptSettlement, addNotice, opts.chatInputRef]);
+  }, [isNew, newSessionCwd, newSessionModel, session, ensureNewSession, ensureEventsConnected, promoteNewSession, waitForPromptSettlement, addNotice, sendLocalizedPromptCommand, opts.chatInputRef]);
 
   const executeBash = useCallback(async (command: string, excludeFromContext: boolean) => {
     if (agentRunningRef.current || bashRunningRef.current) return;
@@ -1375,7 +1403,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid) return;
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
     try {
-      await sendAgentCommand(sid, {
+      await sendLocalizedPromptCommand(sid, {
         type: "steer",
         message,
         ...(piImages?.length ? { images: piImages } : {}),
@@ -1383,7 +1411,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to steer:", e);
     }
-  }, []);
+  }, [sendLocalizedPromptCommand]);
 
   const handlePromptWithStreamingBehavior = useCallback(async (
     message: string,
@@ -1394,7 +1422,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!sid) return;
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
     try {
-      await sendAgentCommand(sid, {
+      await sendLocalizedPromptCommand(sid, {
         type: "prompt",
         message,
         streamingBehavior: behavior,
@@ -1403,14 +1431,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to queue prompt:", e);
     }
-  }, []);
+  }, [sendLocalizedPromptCommand]);
 
   const handleFollowUp = useCallback(async (message: string, images?: AttachedImage[]) => {
     const sid = sessionIdRef.current;
     if (!sid) return;
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
     try {
-      await sendAgentCommand(sid, {
+      await sendLocalizedPromptCommand(sid, {
         type: "follow_up",
         message,
         ...(piImages?.length ? { images: piImages } : {}),
@@ -1418,7 +1446,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     } catch (e) {
       console.error("Failed to follow up:", e);
     }
-  }, []);
+  }, [sendLocalizedPromptCommand]);
 
   const handleAbortCompaction = useCallback(async () => {
     const sid = sessionIdRef.current;
