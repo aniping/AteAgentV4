@@ -15,7 +15,9 @@ ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基�
 ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
-安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。快捷方式启动带有 ATE Agent 红色图标的 `ATE-Agent.exe`；`start.cmd` 仅作为兼容入口保留。
+安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。快捷方式启动带有 ATE Agent 红色图标的 `ATE-Agent.exe`；它会在服务运行期间保持常驻，结束该进程会同步结束其 Node 和工具子进程。`start.cmd` 仅作为兼容入口保留；也可以双击安装目录中的 `stop-all-server.exe` 停止全部相关进程。
+
+内置运行时按类型放置在 `runtime` 下；当前 Node.js 位于 `runtime\node`，以后增加其他运行时不会与 Node.js 文件混放。安装新版时会完整替换内置 Node.js 和应用目录，因此可以随发布包升级 Node.js 与 pi 版本；用户 `.pi` 目录中的会话、Skill、插件和配置不会被覆盖。
 
 安装完成后双击 **ATE Agent** 快捷方式，本机浏览器访问：
 
@@ -95,7 +97,7 @@ build\release\ATE-Agent-Setup-<版本>-win-<架构>.exe
 
 构建会嵌入与当前电脑同架构的官方 Node.js 发行版。Node.js 压缩包会缓存到 `build\node-runtime`，后续打包无需重复下载。
 
-打包流程会删除重复嵌套的 Mistral SDK，并校验默认安装路径长度，防止生成在 Windows 上无法复制或安装的长路径文件。
+打包流程只会移除不影响运行的说明文档、源码映射和重复嵌套的 Mistral SDK，并校验 Node.js、npm/npx、pi 运行包及关键资源完整性。这样可以缩小体积，同时保留离线运行、后续 Node.js/pi 升级以及 Skill、插件安装与更新能力。脚本还会校验默认安装路径长度，防止生成在 Windows 上无法复制或安装的长路径文件。
 
 ## 运行参数与代理
 

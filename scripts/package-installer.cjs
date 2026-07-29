@@ -101,6 +101,26 @@ function removeRedundantNestedPackage(topLevelPackage, nestedPackage) {
   fs.rmSync(nestedPackage, { recursive: true, force: true });
 }
 
+function pruneInstallerPayload(appRoot, nodeRuntimeRoot) {
+  const unusedRuntimeEntries = [
+    path.join(nodeRuntimeRoot, "CHANGELOG.md"),
+    path.join(nodeRuntimeRoot, "README.md"),
+    path.join(nodeRuntimeRoot, "node_modules", "npm", "docs"),
+    path.join(nodeRuntimeRoot, "node_modules", "npm", "man"),
+    path.join(nodeRuntimeRoot, "node_modules", "npm", "README.md"),
+  ];
+  for (const entry of unusedRuntimeEntries) {
+    assertPathUnderBuildRoot(entry);
+    fs.rmSync(entry, { recursive: true, force: true });
+  }
+
+  for (const file of listFiles(appRoot)) {
+    if (path.extname(file).toLowerCase() !== ".map") continue;
+    assertPathUnderBuildRoot(file);
+    fs.rmSync(file, { force: true });
+  }
+}
+
 async function downloadFile(url, destination) {
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok || !response.body) {
@@ -205,7 +225,7 @@ async function main() {
   }
 
   const appRoot = path.join(stagingRoot, "app");
-  const runtimeRoot = path.join(stagingRoot, "runtime");
+  const nodeRuntimeRoot = path.join(stagingRoot, "runtime", "node");
   copyContents(standaloneRoot, appRoot);
   copyContents(staticRoot, path.join(appRoot, ".next", "static"));
   const publicRoot = path.join(repoRoot, "public");
@@ -224,11 +244,11 @@ async function main() {
     ),
   );
 
-  copyContents(nodeDistributionRoot, runtimeRoot);
-  fs.copyFileSync(path.join(nodeDistributionRoot, "LICENSE"), path.join(runtimeRoot, "NODE-LICENSE.txt"));
+  copyContents(nodeDistributionRoot, nodeRuntimeRoot);
+  pruneInstallerPayload(appRoot, nodeRuntimeRoot);
   fs.copyFileSync(path.join(__dirname, "portable-launcher.cjs"), path.join(stagingRoot, "launcher.cjs"));
   fs.copyFileSync(path.join(__dirname, "portable-start.cmd"), path.join(stagingRoot, "start.cmd"));
-  fs.writeFileSync(path.join(runtimeRoot, "NODE-VERSION.txt"), `${process.version}\r\n`, "utf8");
+  fs.writeFileSync(path.join(nodeRuntimeRoot, "NODE-VERSION.txt"), `${process.version}\r\n`, "utf8");
 
   const appIconPath = path.join(stagingRoot, "ate-agent.ico");
   await createWindowsIcon(path.join(__dirname, "ate-agent-icon.svg"), appIconPath);
@@ -241,13 +261,13 @@ async function main() {
     "csc.exe",
   );
   if (!csc) throw new Error("The Windows .NET Framework C# compiler is required to build the server stop helper.");
-  const stopHelperPath = path.join(stagingRoot, "stop-installed-server.exe");
+  const stopHelperPath = path.join(stagingRoot, "stop-all-server.exe");
   run(csc, [
     "/nologo",
-    "/target:exe",
+    "/target:winexe",
     "/optimize+",
     `/out:${stopHelperPath}`,
-    path.join(__dirname, "stop-installed-server.cs"),
+    path.join(__dirname, "stop-all-server.cs"),
   ]);
   const launcherPath = path.join(stagingRoot, "ATE-Agent.exe");
   run(csc, [
@@ -263,6 +283,7 @@ async function main() {
   const packageReadme = `ATE Agent ${packageJson.version} Windows ${process.arch}\r\n\r\n` +
     `This installation includes Node.js ${process.version} with npm/npx; Node.js does not need to be installed separately.\r\n\r\n` +
     "Start:\r\n  Double-click ATE-Agent.exe\r\n\r\n" +
+    "Stop:\r\n  Double-click stop-all-server.exe\r\n\r\n" +
     "Default address:\r\n  http://0.0.0.0:30141\r\n\r\n" +
     "Access from another computer on the same trusted network:\r\n  http://<this-computer-LAN-IP>:30141\r\n\r\n" +
     "Optional arguments:\r\n  ATE-Agent.exe -H 127.0.0.1        Listen on this computer only\r\n" +
@@ -276,15 +297,20 @@ async function main() {
     "ate-agent.ico",
     "start.cmd",
     "launcher.cjs",
-    "stop-installed-server.exe",
-    "runtime/node.exe",
-    "runtime/npm.cmd",
-    "runtime/npx.cmd",
-    "runtime/node_modules/npm/bin/npm-cli.js",
-    "runtime/node_modules/npm/bin/npx-cli.js",
-    "runtime/NODE-LICENSE.txt",
+    "stop-all-server.exe",
+    "runtime/node/node.exe",
+    "runtime/node/npm.cmd",
+    "runtime/node/npx.cmd",
+    "runtime/node/node_modules/npm/bin/npm-cli.js",
+    "runtime/node/node_modules/npm/bin/npx-cli.js",
+    "runtime/node/LICENSE",
     "app/server.js",
+    "app/package.json",
     "app/.next/BUILD_ID",
+    "app/node_modules/@earendil-works/pi-agent-core/package.json",
+    "app/node_modules/@earendil-works/pi-ai/package.json",
+    "app/node_modules/@earendil-works/pi-coding-agent/package.json",
+    "app/node_modules/@earendil-works/pi-tui/package.json",
     "app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/dark.json",
     "app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/light.json",
     "app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.json",
