@@ -3,7 +3,7 @@
 This repo publishes these artifacts for each release:
 
 - npm package: `@agegr/pi-web`
-- Windows portable ZIP with an embedded Node.js runtime
+- Windows NSIS installer with an embedded Node.js runtime
 - GitHub Release: `agegr/pi-web`
 
 Use this checklist from a clean `main` checkout.
@@ -47,24 +47,19 @@ npm view @agegr/pi-web@<version> version --registry https://registry.npmjs.org/
 npm view @agegr/pi-web versions --json --registry https://registry.npmjs.org/
 ```
 
-## 3. Generate the Windows Portable Package
+## 3. Generate the Windows Installer
 
-Run this after `npm run release` so the ZIP uses the newly bumped package version. Stop any local dev server first because the production build replaces `.next/`, then run:
+Run this after `npm run release` so the installer uses the newly bumped package version. Stop any local dev server first because the production build replaces `.next/`, then run from CMD:
 
-```powershell
+```cmd
 npm run package
 ```
 
-The command creates `build/release/pi-web-<version>-win-<arch>.zip`. It uses Next.js standalone output and downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
+The command creates `build/release/ATE-Agent-Setup-<version>-win-<arch>.exe`. It uses Next.js standalone output and downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
 
-Extract the ZIP and verify both listener modes before publishing the GitHub release:
+Install the Setup EXE in a test directory, start ATE Agent, verify local and LAN access, then run the generated uninstaller. The installer defaults to `0.0.0.0:30141`, allowing another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`.
 
-```powershell
-.\start.cmd -H 127.0.0.1 -p 30141
-.\start.cmd -H 0.0.0.0 -p 30141
-```
-
-The second form allows another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`. Never expose the service directly to the internet because it has no application-level authentication.
+Never expose the service directly to the internet because it has no application-level authentication.
 
 ## 4. Commit the Version Bump
 
@@ -156,7 +151,7 @@ gh release create v<version> \
   --verify-tag \
   --title "v<version>" \
   --notes-file release-notes.md \
-  "build/release/pi-web-<version>-win-<arch>.zip"
+  "build/release/ATE-Agent-Setup-<version>-win-<arch>.exe"
 ```
 
 If the release already exists and only the notes need updating:
@@ -181,13 +176,13 @@ gh release edit v<version> --repo agegr/pi-web --notes-file - <<'EOF'
 EOF
 ```
 
-Upload or replace the portable package on an existing release with:
+Upload or replace the Windows installer on an existing release with:
 
 ```bash
 gh release upload v<version> \
   --repo agegr/pi-web \
   --clobber \
-  "build/release/pi-web-<version>-win-<arch>.zip"
+  "build/release/ATE-Agent-Setup-<version>-win-<arch>.exe"
 ```
 
 ## 8. Final Verification

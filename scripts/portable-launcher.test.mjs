@@ -41,9 +41,29 @@ test("portable startup exposes the bundled npm tools to child processes", async 
   assert.match(startScript, /set "PATH=%~dp0runtime;%PATH%"/);
 });
 
-test("portable package uses the ATE Agent artifact name", async () => {
-  const packageScript = await readFile(new URL("./package-portable.ps1", import.meta.url), "utf8");
+test("Windows package builds an ATE Agent NSIS installer", async () => {
+  const [packageJson, packageCommand, packageScript, installerScript, stopSource] = await Promise.all([
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("./package-installer.cmd", import.meta.url), "utf8"),
+    readFile(new URL("./package-installer.cjs", import.meta.url), "utf8"),
+    readFile(new URL("./windows-installer.nsi", import.meta.url), "utf8"),
+    readFile(new URL("./stop-installed-server.cs", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(packageScript, /\$artifactName = "ate-agent-\$\(\$package\.version\)-win-\$\(\$runtime\.arch\)"/);
-  assert.doesNotMatch(packageScript, /\$artifactName = "pi-web-/);
+  assert.equal(JSON.parse(packageJson).scripts.package, "scripts\\package-installer.cmd");
+  assert.match(packageCommand, /node\.exe?"? "%~dp0package-installer\.cjs"/i);
+  assert.match(packageScript, /ATE-Agent-Setup-/);
+  assert.match(packageScript, /removeRedundantNestedPackage/);
+  assert.match(packageScript, /makensis/i);
+  assert.match(installerScript, /WriteUninstaller/);
+  assert.match(installerScript, /CreateShortcut/);
+  assert.match(installerScript, /RequestExecutionLevel admin/);
+  assert.match(installerScript, /stop-installed-server\.exe/);
+  assert.doesNotMatch(installerScript, /[^\x00-\x7F]/);
+  assert.match(stopSource, /MainModule\.FileName/);
+  assert.match(stopSource, /process\.Kill\(\)/);
+  assert.doesNotMatch(
+    [packageJson, packageCommand, packageScript, installerScript, stopSource].join("\n"),
+    /pwsh|powershell|\.ps1/i,
+  );
 });

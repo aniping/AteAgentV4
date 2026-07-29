@@ -1,110 +1,170 @@
-# Pi Web
+# ATE Agent
 
-[中文文档](./README.zh-CN.md) | [日本語](./README.ja.md)
+ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基于 [pi coding agent](https://github.com/badlogic/pi-mono) 提供浏览器工作界面。
 
-Local web UI for the [pi coding agent](https://github.com/badlogic/pi-mono). Pi Web reads your local pi session files and gives you a browser workspace for session browsing, real-time chat, model configuration, skill management, and project file preview.
+它可以管理本机会话、实时对话、模型配置、Skill 与插件，并支持浏览项目文件、Git 状态和 Worktree。
 
-![Pi Web shows the same pi session with structured Markdown, tool calls, and project navigation beside the CLI](https://raw.githubusercontent.com/agegr/pi-web/main/docs/screenshot2.png)
+> [!WARNING]
+> ATE Agent 可以调用本机工具和高权限智能体，但没有应用层身份验证。不要直接暴露到互联网；局域网访问仅限可信网络。
 
-The same pi session in CLI and Pi Web: structured tool calls, readable Markdown, session browsing, and cleaner results.
+## 快速开始：使用 Windows 安装程序
 
-## Quick Start
+已经拿到发布包时，直接运行：
 
-Pi Web requires Node.js 22.19.0 or newer. Check your version with `node --version`.
-
-**Run without installing:**
-
-```bash
-npx @agegr/pi-web@latest
+```text
+ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
-**Or install globally:**
+安装程序默认安装到 `C:\Program Files\ATE Agent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。
 
-```bash
-npm install -g @agegr/pi-web
-pi-web
+安装完成后双击 **ATE Agent** 快捷方式，本机浏览器访问：
+
+```text
+http://127.0.0.1:30141
 ```
 
-Then open [http://127.0.0.1:30141](http://127.0.0.1:30141). The CLI will try to open the browser automatically after the server is ready. Pi Web listens on `127.0.0.1` by default.
+安装版默认监听 `0.0.0.0:30141`。同一可信局域网中的其他电脑可访问：
 
-**Options:**
-
-```bash
-pi-web --port 8080              # custom port
-pi-web --hostname 0.0.0.0       # expose on a trusted network
-pi-web -p 8080 -H 0.0.0.0       # combine options
-pi-web --no-open                # do not open the browser automatically
-
-PORT=8080 pi-web                # environment variable is also supported
-PI_WEB_HOSTNAME=0.0.0.0 pi-web  # explicit network exposure
-PI_WEB_ALLOWED_HOSTS=pi-web.internal pi-web  # allow an exact proxy/custom hostname
-PI_WEB_NO_OPEN=1 pi-web         # useful when running as a background service
+```text
+http://<运行 ATE Agent 电脑的局域网 IP>:30141
 ```
 
-Pi Web has no application-level authentication and can invoke a high-privilege agent. Do not expose it to the internet; only use non-loopback bindings on a trusted network.
-API requests accept loopback names, IP literals, the selected bind hostname, and exact comma-separated names in `PI_WEB_ALLOWED_HOSTS`. Configure that variable when a trusted reverse proxy uses a different external hostname.
+首次运行时，Windows 防火墙可能询问是否允许网络访问。当前本地构建的安装程序未进行代码签名，Windows 可能显示“未知发布者”；只安装来自可信来源的构建。
 
-### Windows portable release package
+目标电脑不需要安装 Node.js、NSIS 或 PowerShell。安装程序已经包含 Node.js、npm 和 npx。
 
-Run `npm run package` on Windows x64 or arm64 to create a same-architecture portable ZIP under `build/release/`. It contains the production application and an official SHA-256-verified Node.js distribution with npm/npx, so the target computer does not need Node.js installed.
+## 快速开始：源码开发运行
 
-Extract the ZIP and double-click `start.cmd`. The portable package listens on `0.0.0.0:30141` by default, so another computer on the same trusted LAN can open `http://<host-LAN-IP>:30141`. Use `start.cmd -H 127.0.0.1` for local-only access or `start.cmd -p 8080` to change the port. Windows Firewall may need an inbound rule for the selected port.
+开发环境需要：
 
-## HTTP Proxy
+- Node.js 22.19.0 或更高版本
+- npm
+- Git（使用 Git 状态与 Worktree 功能时需要）
 
-Pi Web reads the standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables for server-side model and API requests.
+在项目目录打开 CMD，执行：
 
-On macOS or Linux:
-
-```bash
-HTTP_PROXY=http://127.0.0.1:7890 \
-HTTPS_PROXY=http://127.0.0.1:7890 \
-NO_PROXY=localhost,127.0.0.1 \
-npx @agegr/pi-web@latest
+```cmd
+npm install
+npm run dev
 ```
 
-On Windows PowerShell:
+开发服务默认只监听本机：
 
-```powershell
-$env:HTTP_PROXY = "http://127.0.0.1:7890"
-$env:HTTPS_PROXY = "http://127.0.0.1:7890"
-$env:NO_PROXY = "localhost,127.0.0.1"
-npx @agegr/pi-web@latest
+```text
+http://127.0.0.1:30141
 ```
 
-## Features
+需要从可信局域网访问开发服务时，改用：
 
-- **Pick work back up**: browse previous pi conversations by project without digging through terminal history or session paths.
-- **Try different directions safely**: continue from an earlier message or fork a session into a separate route.
-- **Work across branches**: switch Git worktrees from the sidebar so new sessions and the Explorer follow the checkout you choose.
-- **Chat beside the project**: browse files on the left and preview source, docs, images, audio, and PDFs on the right while the agent works.
-- **See session state clearly**: context usage, cost, compaction state, and system prompt details are visible from the top bar.
-- **Configure less from the terminal**: manage models, login/API keys, model tests, and skill switches from the web UI.
-- **Use the interface in your language**: switch between the supported UI languages from the top bar.
+```cmd
+npm run dev:lan
+```
 
-## Notes
+不要把 `npm run dev` 与 `npm run build`、`npm run package` 同时运行。生产构建会更新 `.next`，可能干扰正在运行的开发服务。
 
-- **Data directory**: ATE Agent reads `~/.pi/agent/sessions` by default. Set `PI_CODING_AGENT_DIR` to point at another pi agent directory.
-- **Session files**: files are stored as `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`.
-- **Model config**: the Models panel reads and writes `models.json` in the pi agent directory. Model lists and defaults come from pi's config.
-- **File access**: file browsing and preview are scoped to the selected project directory and working directories that appear in sessions.
-- **Git worktrees**: see [Worktrees in Pi Web](./docs/worktrees.md) for when the switcher appears, how new worktrees are created, and what removal does.
-- **Forks vs in-session branches**: Fork creates a new `.jsonl` file. "Edit from here" creates another branch inside the same session file.
-- **Internationalization**: see [Internationalization](./docs/i18n.md) for using translations and adding languages or UI text.
+## 构建 Windows 安装程序
 
-## Skill ZIP Packages
+安装包使用 [NSIS 3.12](https://nsis.sourceforge.io/Download) 生成。构建电脑需要 Windows x64 或 arm64、Node.js 22.19.0 及 NSIS 3.12。
 
-The Skills panel can install a local ZIP into the global (`~/.pi/agent/skills`) or project (`.pi/skills`) scope. A portable skill ZIP may use a wrapper directory, but it must contain exactly one `SKILL.md` and no files outside that skill directory:
+在 CMD 中通过官方 Winget 源安装 NSIS：
+
+```cmd
+winget install --id NSIS.NSIS -e -s winget
+```
+
+如果 `makensis.exe` 不在默认位置，先设置完整路径：
+
+```cmd
+set NSIS_MAKENSIS=D:\Tools\NSIS\makensis.exe
+```
+
+然后执行：
+
+```cmd
+npm install
+npm run package
+```
+
+输出文件位于：
+
+```text
+build\release\ATE-Agent-Setup-<版本>-win-<架构>.exe
+```
+
+构建脚本入口是 `scripts\package-installer.cmd`，内部使用 Node.js 完成构建、下载、SHA-256 校验和文件整理，不依赖 PowerShell。
+
+构建会嵌入与当前电脑同架构的官方 Node.js 发行版。Node.js 压缩包会缓存到 `build\node-runtime`，后续打包无需重复下载。
+
+打包流程会删除重复嵌套的 Mistral SDK，并校验默认安装路径长度，防止生成在 Windows 上无法复制或安装的长路径文件。
+
+## 运行参数与代理
+
+源码方式可使用以下命令：
+
+```cmd
+npm run start
+npm run start:lan
+```
+
+兼容的运行变量：
+
+```cmd
+set PORT=8080
+set PI_WEB_HOSTNAME=0.0.0.0
+set PI_WEB_ALLOWED_HOSTS=ate-agent.internal
+set PI_WEB_NO_OPEN=1
+```
+
+服务端模型与 API 请求会读取标准代理变量：
+
+```cmd
+set HTTP_PROXY=http://127.0.0.1:7890
+set HTTPS_PROXY=http://127.0.0.1:7890
+set NO_PROXY=localhost,127.0.0.1
+npm run dev
+```
+
+`PI_WEB_*` 和 `pi-web` CLI 名称暂时保留，用于兼容上游配置和已有自动化；用户界面品牌为 ATE Agent。
+
+## 数据目录与默认工作目录
+
+- 会话和配置继续存放在 `~/.pi/agent`，不会创建或迁移到 `~/.ate`。
+- 会话默认位于 `~/.pi/agent/sessions`。
+- 模型配置位于 pi agent 数据目录下的 `models.json`。
+- 可通过 `PI_CODING_AGENT_DIR` 指定其他 pi agent 数据目录。
+- 新会话的日期工作目录默认为 `~/ate-cwd-YYYYMMDD`。
+- 项目级 Skill 位于 `.pi/skills`，全局 Skill 位于 `~/.pi/agent/skills`。
+
+卸载 ATE Agent 只删除安装目录、快捷方式和卸载注册信息，不删除 `~/.pi/agent` 中的会话、模型或 Skill 数据。
+
+## 主要功能
+
+- **会话管理**：按项目浏览、恢复、重命名、删除和分支会话。
+- **实时对话**：通过 SSE 接收模型输出、工具调用、思考过程和状态更新。
+- **模型配置**：管理提供商、API 地址、API Key、自定义模型和 Thinking 等级。
+- **本地 API**：支持无需 API Key 的兼容接口配置与连通性测试。
+- **上下文管理**：显示 Token、费用与上下文占用，并提供压缩反馈。
+- **文件浏览**：预览源码、Diff、图片、音频、PDF 和 DOCX。
+- **Git 与 Worktree**：显示仓库状态并在多个工作树之间切换。
+- **Skill 管理**：搜索、安装、上传、更新、启停和卸载 Skill。
+- **插件管理**：安装和管理 pi 扩展包，并提供官方扩展目录入口。
+- **集成安装包**：支持包含 Skill、运行时和可选 MCP 服务的通用 ZIP。
+
+## Skill 与集成 ZIP
+
+完整制作流程见 [Skill 与集成 ZIP 制作指南](./docs/skill-packages.zh-CN.md)。
+
+普通 Skill ZIP 可以带一层包装目录，但包内必须只有一个 `SKILL.md`，且不能在 Skill 目录外放置文件：
 
 ```text
 my-skill.zip
-└── my-skill/
+└── my-skill\
     ├── SKILL.md
-    ├── scripts/
-    └── references/
+    ├── scripts\
+    └── references\
 ```
 
-Packages that also carry a runtime use the generic integration format below. The root `ateagent-integration.json` declares the skill and an optional stdio MCP server; `SHA256SUMS.json` must list the SHA-256 digest of every other file in the archive.
+需要携带运行时或 MCP 服务时，使用根目录清单 `ateagent-integration.json`，并用 `SHA256SUMS.json` 列出其他文件的 SHA-256。
 
 ```json
 {
@@ -122,69 +182,44 @@ Packages that also carry a runtime use the generic integration format below. The
 }
 ```
 
-`platform`, `arch`, `mcp.args`, and `mcp.env` are optional. MCP tools are discovered automatically through the protocol, so new packages do not need to list tool names. MCP integration installs/configures `pi-mcp-adapter` in the selected scope when needed. ZIP-installed skills can be uninstalled from their detail view; uninstalling also removes that archive's integration runtime and owned MCP server entry, while retaining the shared adapter package. Upload validation rejects unsafe paths, symbolic links, checksum mismatches, unsupported platform/architecture, multiple skills, targets that already exist, archives over 512MB, and expanded contents over 1GB. Uploaded programs are not executed during installation; only install archives from trusted sources because Pi may execute their runtime later.
+`platform`、`arch`、`mcp.args` 和 `mcp.env` 可以省略。MCP 工具通过协议自动发现，不需要在清单中枚举工具名。
 
-## Development
+上传限制为 ZIP 512MB、解压内容 1GB。安装器会拒绝危险路径、符号链接、校验和不匹配、多 Skill、平台或架构不兼容，以及覆盖已有目标的压缩包。
 
-```bash
-npm install
+上传安装阶段不会执行压缩包中的程序，但 Agent 后续可能运行集成运行时。只安装可信来源的 Skill 与集成包。
+
+## 开发与验证
+
+常用命令：
+
+```cmd
 npm run dev
-```
-
-The local dev server runs at [http://127.0.0.1:30141](http://127.0.0.1:30141).
-
-Common checks:
-
-```bash
-node_modules/.bin/tsc --noEmit
 npm run lint
+npx tsc --noEmit
+npm run build
+npm run package
 ```
 
-Avoid running `next build` / `npm run build` during local development. It writes to `.next/` and can interfere with the dev server; leave builds for release work.
+打包相关测试：
 
-## Project Structure
+```cmd
+node --test scripts\portable-build-preload.test.mjs scripts\portable-launcher.test.mjs
+```
+
+## 项目结构
 
 ```text
-app/
-  api/
-    agent/          # creates/drives AgentSession and exposes SSE events
-    auth/           # OAuth and API key management
-    cwd/browse/     # browsable server directory listing
-    cwd/validate/   # custom working directory validation
-    default-cwd/    # pi default working directory lookup
-    files/          # file listing, reading, preview, and watching
-    home/           # current user home directory
-    models/         # available models, default model, thinking levels
-    models-config/  # read/write models.json and test models
-    sessions/       # session reads, rename, delete, context, HTML export
-    skills/         # skill listing, search, install, enable/disable
-components/
-  AppShell.tsx        # main layout, URL state, top panels, file tabs
-  SessionSidebar.tsx  # project selector, session tree, Explorer
-  DirectoryPicker.tsx # browsable and editable working-directory picker
-  ChatWindow.tsx      # messages, SSE, image drag/drop, minimap
-  ChatInput.tsx       # input bar, model/tools/thinking/compact/slash controls
-  MessageView.tsx     # message, thinking, tool call/result rendering
-  ModelsConfig.tsx    # model and auth configuration panel
-  SkillsConfig.tsx    # skill management panel
-  FileExplorer.tsx    # file tree
-  FileViewer.tsx      # source, diff, image, audio, PDF, DOCX preview
-lib/
-  directory-browser.ts # directory normalization and safe listing helpers
-  http-dispatcher.ts  # HTTP(S) proxy setup for server-side fetch
-  rpc-manager.ts      # AgentSessionWrapper lifecycle and global registry
-  session-reader.ts   # parses .jsonl session files and branch contexts
-  normalize.ts        # normalizes toolCall field names
-  file-access.ts      # file read safety boundary
-  file-paths.ts       # path encoding and relative path helpers
-  markdown.ts         # Markdown/Mermaid/KaTeX plugin configuration
-  pi-types.ts         # pi-related types
-hooks/
-  useAgentSession.ts  # session loading, command sending, SSE state machine
-  useAudio.ts         # completion sound
-  useDragDrop.ts      # image drag/drop
-  useTheme.ts         # theme switching
-bin/
-  pi-web.js           # npm CLI entrypoint
-instrumentation.ts    # initializes the server HTTP dispatcher
+app\                    Next.js 页面与 API 路由
+components\             会话、对话、模型、Skill 和文件界面
+hooks\                  对话、主题、拖放与音频等前端状态
+lib\                    会话、Agent、文件、安全和配置逻辑
+scripts\                Windows 安装器与构建脚本
+public\                 静态资源
+docs\                   使用与安装包制作文档
+bin\pi-web.js           兼容的 npm CLI 入口
+next.config.ts          Next.js 与 standalone 构建配置
 ```
+
+## 许可证
+
+本项目沿用 MIT License。第三方模型 SDK、Node.js、NSIS 与其他依赖遵循各自许可证。
