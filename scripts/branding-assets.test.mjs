@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const appFavicon = new URL("../app/favicon.ico", import.meta.url);
 const appIcon = new URL("../app/icon.svg", import.meta.url);
 const rootLayout = new URL("../app/layout.tsx", import.meta.url);
+const manifest = new URL("../app/manifest.ts", import.meta.url);
+const pwaRegistration = new URL("../components/PwaRegistration.tsx", import.meta.url);
+const offlinePage = new URL("../public/offline.html", import.meta.url);
+const serviceWorker = new URL("../public/sw.js", import.meta.url);
 const packageScript = new URL("./package-installer.cjs", import.meta.url);
+const pwaIcons = new Map([
+  [new URL("../public/icons/apple-touch-icon.png", import.meta.url), "80147b725be98444294fdc66989f3ae330bc78a4a0129ee997341d30b4edcf10"],
+  [new URL("../public/icons/icon-192.png", import.meta.url), "6b42a850d89ca14e7adbf41a0dc4bfe01252b43a6f027c348eacb6d5c576ac1d"],
+  [new URL("../public/icons/icon-512.png", import.meta.url), "0785ee169a5f0c7e8203ac49fcdfd2ccd556e47fed5343287cade2ab871aa5fa"],
+]);
 
 async function exists(file) {
   try {
@@ -33,4 +43,24 @@ test("browser metadata uses the canonical ATE Agent icon", async () => {
   assert.match(layoutSource, /title:\s*"ATE Agent"/);
   assert.doesNotMatch(layoutSource, /Pi Web/i);
   assert.match(installerSource, /path\.join\(repoRoot, "app", "icon\.svg"\)/);
+});
+
+test("PWA metadata and assets use ATE Agent branding", async () => {
+  const brandedSources = await Promise.all([
+    readFile(rootLayout, "utf8"),
+    readFile(manifest, "utf8"),
+    readFile(pwaRegistration, "utf8"),
+    readFile(offlinePage, "utf8"),
+    readFile(serviceWorker, "utf8"),
+  ]);
+
+  for (const source of brandedSources) {
+    assert.match(source, /ATE Agent|ate-agent/);
+    assert.doesNotMatch(source, /Pi Web|pi-web/i);
+  }
+
+  for (const [icon, expectedHash] of pwaIcons) {
+    const actualHash = createHash("sha256").update(await readFile(icon)).digest("hex");
+    assert.equal(actualHash, expectedHash);
+  }
 });
