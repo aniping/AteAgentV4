@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { selectAvailableModel } from "@/lib/models-config";
 import { getToolNamesForPreset, type ToolEntry } from "@/lib/tool-presets";
 import type { Locale } from "@/lib/i18n/types";
 import type { SessionStatsInfo } from "@/lib/pi-types";
@@ -1625,6 +1626,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     });
     return () => controller.abort();
   }, [loadModels, modelsRefreshKey]);
+
+  useEffect(() => {
+    if (isNew || agentRunning || !currentModel) return;
+    const fallback = selectAvailableModel(currentModel, modelList);
+    if (!fallback) return;
+    void handleModelChange(fallback.provider, fallback.modelId);
+  }, [agentRunning, currentModel, handleModelChange, isNew, modelList]);
 
   useEffect(() => {
     if (!compactResult) return;
