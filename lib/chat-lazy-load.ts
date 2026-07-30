@@ -20,3 +20,16 @@ export function captureScrollDistance(scrollHeight: number, scrollTop: number): 
 export function restoreScrollTop(scrollHeight: number, savedDistance: number): number {
   return Math.max(0, scrollHeight - savedDistance);
 }
+
+export function isScrollAtBottom(
+  scrollHeight: number,
+  scrollTop: number,
+  clientHeight: number,
+  threshold = 24,
+): boolean {
+  return scrollHeight - scrollTop - clientHeight <= threshold;
+}
+
+export function getStreamingScrollTarget(scrollHeight: number, shouldFollow: boolean): number | null {
+  return shouldFollow ? scrollHeight : null;
+}

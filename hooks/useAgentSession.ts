@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo, useReducer } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo, useReducer } from "react";
 import type {
   AgentMessage,
   ExtensionStatusItem,
@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { getStreamingScrollTarget, isScrollAtBottom } from "@/lib/chat-lazy-load";
 import { selectAvailableModel } from "@/lib/models-config";
 import { getToolNamesForPreset, type ToolEntry } from "@/lib/tool-presets";
 import type { Locale } from "@/lib/i18n/types";
@@ -1098,7 +1099,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setAgentPhase(isSlashCommandPrompt ? { kind: "running_command" } : { kind: "waiting_model" });
     dispatch({ type: "start" });
     pendingScrollToUserRef.current = true;
-    completionScrollAllowedRef.current = true;
+    const scrollContainer = scrollContainerRef.current;
+    completionScrollAllowedRef.current = scrollContainer
+      ? isScrollAtBottom(scrollContainer.scrollHeight, scrollContainer.scrollTop, scrollContainer.clientHeight)
+      : true;
 
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
 
@@ -1527,7 +1531,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     if (!agentRunningRef.current) return;
     if (Date.now() < ignoreProgrammaticScrollUntilRef.current) return;
     if (Date.now() > userScrollIntentUntilRef.current) return;
-    completionScrollAllowedRef.current = false;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    completionScrollAllowedRef.current = isScrollAtBottom(
+      container.scrollHeight,
+      container.scrollTop,
+      container.clientHeight,
+    );
   }, []);
 
   // Load session on mount
@@ -1617,6 +1627,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     }
   }, [messages.length, agentRunning, scrollToBottom, scrollUserMsgToTop]);
+
+  useLayoutEffect(() => {
+    if (!streamState.isStreaming || !streamState.streamingMessage) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const target = getStreamingScrollTarget(container.scrollHeight, completionScrollAllowedRef.current);
+    if (target === null) return;
+    ignoreProgrammaticScrollUntilRef.current = Date.now() + PROGRAMMATIC_SCROLL_IGNORE_MS;
+    container.scrollTo({ top: target, behavior: "instant" });
+  }, [streamState.isStreaming, streamState.streamingMessage]);
 
   // Load model list
   useEffect(() => {
