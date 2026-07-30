@@ -3,6 +3,8 @@ import { resolve } from "path";
 import { createAgentSessionServices, getAgentDir, type SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { loadModelsWithCache, withModelRuntimeError, type ModelsData } from "@/lib/models-cache";
+import { filterModelsByConfig } from "@/lib/models-config";
+import { readModelsConfig } from "@/lib/models-config-file";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 
@@ -61,7 +63,8 @@ async function loadModels(cwd: string): Promise<ModelsData> {
   const modelError = services.modelRuntime.getError();
   const settings: SettingsManager = services.settingsManager;
   const enabledModels = settings.getEnabledModels();
-  const visible = filterByExactEnabledModels(available, enabledModels);
+  const configured = filterModelsByConfig(available, readModelsConfig());
+  const visible = filterByExactEnabledModels(configured, enabledModels);
   modelList = visible.map((m: { id: string; name: string; provider: string }) => ({
     id: m.id,
     name: m.name,

@@ -5,6 +5,8 @@ import { existsSync, realpathSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
+import { isModelAllowedByConfig } from "./models-config";
+import { readModelsConfig } from "./models-config-file";
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import {
@@ -355,6 +357,10 @@ export class AgentSessionWrapper {
         if (this.inner.isBashRunning) {
           throw new Error("Cannot send a prompt while a shell command is running");
         }
+        const activeModel = this.inner.model;
+        if (activeModel && !isModelAllowedByConfig(activeModel, readModelsConfig())) {
+          throw new Error(`Model is no longer configured: ${activeModel.provider}/${activeModel.id}`);
+        }
         // Fire and forget — events come via subscribe
         const promptImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
         const streamingBehavior = command.streamingBehavior as "steer" | "followUp" | undefined;
@@ -419,6 +425,9 @@ export class AgentSessionWrapper {
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
+        if (!isModelAllowedByConfig({ provider, id: modelId }, readModelsConfig())) {
+          throw new Error(`Model is not configured: ${provider}/${modelId}`);
+        }
         let model = this.inner.modelRuntime.getModel(provider, modelId);
         if (!model) {
           await this.inner.modelRuntime.refresh({ allowNetwork: false });

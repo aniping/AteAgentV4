@@ -5,6 +5,12 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useI18n } from "@/hooks/useI18n";
 import type { ModelCatalogPreset, ModelCatalogRecommendation } from "@/lib/model-catalog";
 import type { DiscoveredModel } from "@/lib/model-discovery";
+import {
+  normalizeModelsConfig,
+  type ModelConfigEntry as ModelEntry,
+  type ModelsConfig as ModelsJson,
+  type ProviderConfigEntry as ProviderEntry,
+} from "@/lib/models-config";
 // Color icons (have their own fill colors — no background needed)
 import AnthropicIcon from "@lobehub/icons/es/Anthropic/components/Mono";
 import OpenAIIcon from "@lobehub/icons/es/OpenAI/components/Mono";
@@ -112,33 +118,6 @@ type OAuthLoginState =
   | { phase: "progress"; message: string }
   | { phase: "success" }
   | { phase: "error"; message: string };
-
-interface ModelEntry {
-  id: string;
-  name?: string;
-  api?: string;
-  reasoning?: boolean;
-  thinkingLevelMap?: Record<string, string | null>;
-  input?: string[];
-  contextWindow?: number;
-  maxTokens?: number;
-  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
-  compat?: Record<string, unknown>;
-}
-
-interface ProviderEntry {
-  baseUrl?: string;
-  api?: string;
-  apiKey?: string;
-  headers?: Record<string, string>;
-  compat?: Record<string, unknown>;
-  models?: ModelEntry[];
-  modelOverrides?: Record<string, unknown>;
-}
-
-interface ModelsJson {
-  providers?: Record<string, ProviderEntry>;
-}
 
 export const INTERNAL_PROVIDER_NAME = "AteTest";
 export const INTERNAL_PROVIDER_CONFIG = {
@@ -1818,7 +1797,7 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
       const provider = prev.providers?.[providerName] ?? {};
       const models = [...(provider.models ?? [])];
       models.splice(index, 1);
-      return { ...prev, providers: { ...(prev.providers ?? {}), [providerName]: { ...provider, models: models.length ? models : undefined } } };
+      return { ...prev, providers: { ...(prev.providers ?? {}), [providerName]: { ...provider, models } } };
     });
     setSelection({ type: "provider", name: providerName });
   }, []);
@@ -1828,14 +1807,19 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
     setSaveError(null);
     setSavedOk(false);
     try {
+      const normalized = normalizeModelsConfig(config);
       const res = await fetch("/api/models-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify(normalized),
       });
-      const d = await res.json() as { success?: boolean; error?: string };
+      const d = await res.json() as { success?: boolean; error?: string; config?: ModelsJson };
       if (!res.ok || d.error) setSaveError(d.error ?? `HTTP ${res.status}`);
-      else { setSavedOk(true); setTimeout(() => setSavedOk(false), 2000); }
+      else {
+        setConfig(d.config ?? normalized);
+        setSavedOk(true);
+        setTimeout(() => setSavedOk(false), 2000);
+      }
     } catch (e) {
       setSaveError(String(e));
     } finally {
