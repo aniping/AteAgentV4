@@ -1,3 +1,4 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, Theme } from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager as TuiKeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { randomUUID } from "crypto";
@@ -7,6 +8,7 @@ import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { isModelAllowedByConfig } from "./models-config";
 import { readModelsConfig } from "./models-config-file";
+import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import {
@@ -68,6 +70,13 @@ type ExtensionCommandContextActionsLike = {
 type ExtensionBindingOptions = {
   forceEmptySystemPrompt?: boolean;
 };
+
+export interface RpcSessionStartOptions {
+  toolNames?: string[];
+  initialModel?: { provider: string; modelId: string };
+  thinkingLevel?: ThinkingLevel;
+  promptLocale?: unknown;
+}
 
 const CODING_TOOL_NAMES = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 
@@ -1135,15 +1144,17 @@ export function notifyRunningChange(): void {
 /**
  * Get or create an AgentSession for the given session.
  * For new sessions (sessionFile === ""), pi generates its own id.
- * Pass toolNames to pre-configure active tools (empty array = all tools disabled).
+ * New sessions resolve enabledModels before construction so the initial model,
+ * thinking pin, and SDK scopedModels share one settings snapshot.
+ * Pass options.toolNames to pre-configure active tools (empty = all disabled).
  */
 export async function startRpcSession(
   sessionId: string,
   sessionFile: string,
   cwd: string,
-  toolNames?: string[],
-  promptLocale?: unknown,
+  options: RpcSessionStartOptions = {},
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
+  const { toolNames, initialModel, thinkingLevel, promptLocale } = options;
   const registry = getRegistry();
   const locks = getLocks();
 
@@ -1197,9 +1208,29 @@ export async function startRpcSession(
       },
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
+    const modelsConfig = readModelsConfig();
+    const scope = await resolveVisibleModels(
+      services.modelRuntime,
+      services.settingsManager.getEnabledModels(),
+      (model) => isModelAllowedByConfig(model, modelsConfig),
+    );
+    const defaultProvider = services.settingsManager.getDefaultProvider();
+    const defaultModelId = services.settingsManager.getDefaultModel();
+    const initial = sessionFile
+      ? { scopedModels: [...scope.scopedModels] }
+      : selectInitialModelScope(scope, {
+        ...(initialModel ? { requestedModel: initialModel } : {}),
+        ...(defaultProvider && defaultModelId
+          ? { defaultModel: { provider: defaultProvider, modelId: defaultModelId } }
+          : {}),
+        ...(thinkingLevel ? { thinkingLevel } : {}),
+      });
     const { session: inner } = await createAgentSessionFromServices({
       services,
       sessionManager,
+      ...(initial.model ? { model: initial.model } : {}),
+      ...(initial.thinkingLevel ? { thinkingLevel: initial.thinkingLevel } : {}),
+      ...(initial.scopedModels.length > 0 ? { scopedModels: initial.scopedModels } : {}),
       ...(toolsOption !== undefined ? { tools: toolsOption } : {}),
     });
 

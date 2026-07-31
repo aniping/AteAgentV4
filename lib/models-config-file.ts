@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { writePrivateFileAtomicSync } from "./atomic-file";
 import type { ModelsConfig } from "./models-config";
 
 export function getModelsConfigPath(): string {
@@ -21,5 +22,5 @@ export function writeModelsConfig(config: ModelsConfig): void {
   const path = getModelsConfigPath();
   const dir = dirname(path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(config, null, 2), "utf8");
+  writePrivateFileAtomicSync(path, JSON.stringify(config, null, 2));
 }

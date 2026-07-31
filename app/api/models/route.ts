@@ -3,8 +3,9 @@ import { resolve } from "path";
 import { createAgentSessionServices, getAgentDir, type SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { loadModelsWithCache, withModelRuntimeError, type ModelsData } from "@/lib/models-cache";
-import { filterModelsByConfig } from "@/lib/models-config";
+import { isModelAllowedByConfig } from "@/lib/models-config";
 import { readModelsConfig } from "@/lib/models-config-file";
+import { resolveVisibleModels, selectInitialModelScope } from "@/lib/model-scope";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { projectTrustReloadOptions } from "@/lib/project-trust";
 
@@ -19,27 +20,6 @@ function compareModelEntries(
   return modelNameCollator.compare(a.name || a.id, b.name || b.id)
     || modelNameCollator.compare(a.provider, b.provider)
     || modelNameCollator.compare(a.id, b.id);
-}
-
-const THINKING_SUFFIXES = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-
-function stripThinkingSuffix(modelRef: string): string {
-  const trimmed = modelRef.trim();
-  const colonIndex = trimmed.lastIndexOf(":");
-  if (colonIndex === -1) return trimmed;
-  const suffix = trimmed.substring(colonIndex + 1);
-  return THINKING_SUFFIXES.has(suffix) ? trimmed.substring(0, colonIndex) : trimmed;
-}
-
-function filterByExactEnabledModels<T extends { id: string; provider: string }>(
-  available: readonly T[],
-  enabledModels: string[] | undefined,
-): readonly T[] {
-  if (!enabledModels || enabledModels.length === 0) return available;
-
-  const refs = new Set(enabledModels.map(stripThinkingSuffix).filter(Boolean));
-  const visible = available.filter((m) => refs.has(`${m.provider}/${m.id}`) || refs.has(m.id));
-  return visible.length > 0 ? visible : available;
 }
 
 async function loadModels(cwd: string): Promise<ModelsData> {
@@ -59,13 +39,18 @@ async function loadModels(cwd: string): Promise<ModelsData> {
     agentDir,
     ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
   });
-  const available = await services.modelRuntime.getAvailable();
   const modelError = services.modelRuntime.getError();
   const settings: SettingsManager = services.settingsManager;
-  const enabledModels = settings.getEnabledModels();
-  const configured = filterModelsByConfig(available, readModelsConfig());
-  const visible = filterByExactEnabledModels(configured, enabledModels);
-  modelList = visible.map((m: { id: string; name: string; provider: string }) => ({
+  // `enabledModels` supports globs and fuzzy patterns, so resolve it the same
+  // way the CLI does instead of comparing pattern strings literally (#307).
+  const modelsConfig = readModelsConfig();
+  const scope = await resolveVisibleModels(
+    services.modelRuntime,
+    settings.getEnabledModels(),
+    (model) => isModelAllowedByConfig(model, modelsConfig),
+  );
+  const { visible, thinkingLevelPins, warnings } = scope;
+  modelList = visible.map((m) => ({
     id: m.id,
     name: m.name,
     provider: m.provider,
@@ -77,14 +62,27 @@ async function loadModels(cwd: string): Promise<ModelsData> {
     if (m.thinkingLevelMap) thinkingLevelMaps[key] = m.thinkingLevelMap;
   }
 
-  const provider = settings.getDefaultProvider();
-  const modelId = settings.getDefaultModel();
-  if (provider && modelId && visible.some((m) => m.provider === provider && m.id === modelId)) {
-    defaultModel = { provider, modelId };
+  const defaultProvider = settings.getDefaultProvider();
+  const defaultModelId = settings.getDefaultModel();
+  const initial = selectInitialModelScope(scope, {
+    ...(defaultProvider && defaultModelId
+      ? { defaultModel: { provider: defaultProvider, modelId: defaultModelId } }
+      : {}),
+  });
+  if (initial.model) {
+    defaultModel = { provider: initial.model.provider, modelId: initial.model.id };
   }
 
   return withModelRuntimeError(
-    { models: Object.fromEntries(nameMap), modelList, defaultModel, thinkingLevels, thinkingLevelMaps },
+    {
+      models: Object.fromEntries(nameMap),
+      modelList,
+      defaultModel,
+      thinkingLevels,
+      thinkingLevelMaps,
+      thinkingLevelPins,
+      ...(warnings.length > 0 ? { modelScopeWarnings: warnings } : {}),
+    },
     modelError,
   );
 }
@@ -95,6 +93,7 @@ const EMPTY_MODELS: ModelsData = {
   defaultModel: null,
   thinkingLevels: {},
   thinkingLevelMaps: {},
+  thinkingLevelPins: {},
 };
 
 export async function GET(req: Request) {

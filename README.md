@@ -7,7 +7,7 @@ ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基�
 各版本的新增能力、体验改进和问题修复见 [ATE Agent 版本特性](./CHANGELOG.md)。
 
 > [!WARNING]
-> ATE Agent 可以调用本机工具和高权限智能体，但没有应用层身份验证。不要直接暴露到互联网；局域网访问仅限可信网络。
+> ATE Agent 可以调用本机工具和高权限智能体。默认不启用密码认证；不要直接暴露到互联网，局域网访问仅限可信网络。
 
 ## 快速开始：使用 Windows 安装程序
 
@@ -120,8 +120,11 @@ npm run start:lan
 set PORT=8080
 set PI_WEB_HOSTNAME=0.0.0.0
 set PI_WEB_ALLOWED_HOSTS=ate-agent.internal
+set PI_WEB_PASSWORD=请替换为足够长的随机密码
 set PI_WEB_NO_OPEN=1
 ```
+
+设置非空的 `PI_WEB_PASSWORD` 后，网页和 API 会启用 HTTP Basic Auth，用户名固定为 `pi`。Basic Auth 不加密传输内容；远程访问必须通过可信的 HTTPS 反向代理或 VPN，不能把普通 HTTP 服务直接暴露到互联网。未设置或设置为空时不启用认证。
 
 服务端模型与 API 请求会读取标准代理变量：
 

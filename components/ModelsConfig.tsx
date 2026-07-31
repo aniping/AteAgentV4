@@ -98,6 +98,8 @@ interface OAuthProvider {
   name: string;
   usesCallbackServer: boolean;
   loggedIn: boolean;
+  /** Provider also accepts an API key, so it appears in both picker sections. */
+  supportsApiKey?: boolean;
 }
 
 interface ApiKeyProvider {
@@ -106,6 +108,8 @@ interface ApiKeyProvider {
   configured: boolean;
   source?: string;
   modelCount: number;
+  /** Provider also supports OAuth, so it appears in both picker sections. */
+  supportsOAuth?: boolean;
 }
 
 type OAuthLoginState =
@@ -1686,6 +1690,15 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
       .catch(() => {});
   }, []);
 
+  // A dual-auth provider moves between the two lists when its credential type
+  // changes, so any auth change has to reload both — refreshing only one leaves
+  // the provider rendered twice, and disconnecting the stale row would delete
+  // the credential that was just created (#309).
+  const refreshAuthProviders = useCallback(() => {
+    loadOAuthProviders();
+    loadApiKeyProviders();
+  }, [loadOAuthProviders, loadApiKeyProviders]);
+
   useEffect(() => {
     fetch("/api/models-config")
       .then((r) => r.json())
@@ -1697,9 +1710,8 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
       })
       .catch(() => setConfig({ providers: {} }))
       .finally(() => setLoading(false));
-    loadOAuthProviders();
-    loadApiKeyProviders();
-  }, [loadOAuthProviders, loadApiKeyProviders]);
+    refreshAuthProviders();
+  }, [refreshAuthProviders]);
 
   const addCustomProvider = useCallback(() => {
     let finalName = "new-provider";
@@ -1837,12 +1849,12 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
     if (selection.type === "oauth") {
       const p = oauthProviders.find((p) => p.id === selection.providerId);
       if (!p) return null;
-      return <OAuthDetail key={p.id} provider={p} onRefresh={loadOAuthProviders} />;
+      return <OAuthDetail key={p.id} provider={p} onRefresh={refreshAuthProviders} />;
     }
     if (selection.type === "apikey") {
       const p = apiKeyProviders.find((p) => p.id === selection.providerId);
       if (!p) return null;
-      return <ApiKeyDetail key={p.id} provider={p} onRefresh={loadApiKeyProviders} />;
+      return <ApiKeyDetail key={p.id} provider={p} onRefresh={refreshAuthProviders} />;
     }
     if (selection.type === "provider") {
       const provider = config.providers?.[selection.name];

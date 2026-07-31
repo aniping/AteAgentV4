@@ -10,6 +10,9 @@ const manifest = new URL("../app/manifest.ts", import.meta.url);
 const pwaRegistration = new URL("../components/PwaRegistration.tsx", import.meta.url);
 const offlinePage = new URL("../public/offline.html", import.meta.url);
 const serviceWorker = new URL("../public/sw.js", import.meta.url);
+const webProxy = new URL("../proxy.ts", import.meta.url);
+const cliLauncher = new URL("../bin/pi-web.js", import.meta.url);
+const russianReadme = new URL("../README.ru.md", import.meta.url);
 const packageScript = new URL("./package-installer.cjs", import.meta.url);
 const pwaIcons = new Map([
   [new URL("../public/icons/apple-touch-icon.png", import.meta.url), "80147b725be98444294fdc66989f3ae330bc78a4a0129ee997341d30b4edcf10"],
@@ -76,4 +79,17 @@ test("PWA fetches Next.js static assets before falling back to cache", async () 
     source,
     /async function networkFirst\(request\)[\s\S]*?await fetch\(request\)[\s\S]*?await caches\.match\(request\)/,
   );
+});
+
+test("password authentication uses ATE Agent branding without Russian documentation", async () => {
+  const [proxySource, launcherSource] = await Promise.all([
+    readFile(webProxy, "utf8"),
+    readFile(cliLauncher, "utf8"),
+  ]);
+
+  assert.match(proxySource, /Basic realm="ATE Agent"/);
+  assert.doesNotMatch(proxySource, /Basic realm="Pi Web"/i);
+  assert.match(launcherSource, /Warning: ATE Agent is listening/);
+  assert.doesNotMatch(launcherSource, /Warning: pi-web is listening/i);
+  assert.equal(await exists(russianReadme), false);
 });
