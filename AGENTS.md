@@ -12,6 +12,16 @@ Lint: `npm run lint`
 
 ---
 
+## Release Documentation
+
+- User-facing UI release history is maintained in `CHANGELOG.md`.
+- Every UI version change in `package.json` must update `CHANGELOG.md` in the same commit.
+- Add the new version at the top with its release date and short entries for added features, improvements, fixes, and important dependency or upstream-version changes.
+- Derive the entry from commits since the previous UI version. Describe user-visible impact, preserve existing historical entries, and correct old entries only when they are factually wrong.
+- Keep the root version in `package-lock.json` synchronized with `package.json`.
+
+---
+
 ## Architecture
 
 ```
