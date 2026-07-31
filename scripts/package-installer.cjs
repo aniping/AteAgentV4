@@ -15,6 +15,12 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json
 const agentPackageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"), "utf8"),
 );
+const declaredAgentVersion = packageJson.dependencies["@earendil-works/pi-coding-agent"];
+if (agentPackageJson.version !== declaredAgentVersion) {
+  throw new Error(
+    `Installed pi-coding-agent ${agentPackageJson.version} does not match package.json ${declaredAgentVersion}. Run npm install before packaging.`,
+  );
+}
 
 function run(executable, args, options = {}) {
   const result = spawnSync(executable, args, {

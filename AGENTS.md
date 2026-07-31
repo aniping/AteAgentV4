@@ -19,6 +19,7 @@ Lint: `npm run lint`
 - Add the new version at the top with its release date and short entries for added features, improvements, fixes, and important dependency or upstream-version changes.
 - Derive the entry from commits since the previous UI version. Describe user-visible impact, preserve existing historical entries, and correct old entries only when they are factually wrong.
 - Keep the root version in `package-lock.json` synchronized with `package.json`.
+- After changing a Pi package version, run `npm install` before packaging and confirm the installed package manifests match `package.json`; never build an installer from stale `node_modules`.
 
 ---
 
