@@ -405,7 +405,8 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
 
   return (
     <div
-      className="relative flex h-full flex-col overflow-hidden"
+      className="relative flex h-full min-w-0 flex-col overflow-hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -496,7 +497,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
         </div>
       ) : (
       <>
-      <div className="relative flex flex-1 overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 overflow-hidden">
         <div
           style={{
             position: "absolute",
@@ -512,9 +513,9 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
             <NoticeShelf notices={notices} floating align="right" />
           </div>
         </div>
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-4 [scrollbar-width:none]" style={{ overflowAnchor: "none" }}>
-          <div style={{ padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
-            <div style={{ maxWidth: 820, margin: "0 auto" }}>
+        <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-width:none]" style={{ overflowAnchor: "none" }}>
+          <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
+            <div style={{ width: "100%", minWidth: 0, maxWidth: 820, margin: "0 auto" }}>
               <ExtensionWidgets widgets={aboveEditorWidgets} />
 
             {(() => {
