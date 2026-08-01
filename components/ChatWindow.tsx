@@ -184,6 +184,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   playDoneSoundRef.current = playDoneSound;
   const soundEnabledRef = useRef(soundEnabled);
   soundEnabledRef.current = soundEnabled;
+  const soundedExtensionDialogIdRef = useRef<string | null>(null);
   const wrappedOnAgentEnd = useCallback(() => {
     if (soundEnabledRef.current) {
       playDoneSoundRef.current();
@@ -218,6 +219,12 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsPanelOpen,
   });
   const sessionBusy = agentRunning || bashRunning;
+
+  useEffect(() => {
+    if (!extensionDialog || soundedExtensionDialogIdRef.current === extensionDialog.id) return;
+    soundedExtensionDialogIdRef.current = extensionDialog.id;
+    playDoneSoundRef.current();
+  }, [extensionDialog]);
 
   // Register the abort handler for the global Esc shortcut
   useEffect(() => {
