@@ -38,6 +38,102 @@ function updateKey(skill: Skill): string | null {
     : null;
 }
 
+const SKILL_GROUP_ORDER = [
+  "project / skills.sh",
+  "project",
+  "global / skills.sh",
+  "global",
+  "path",
+] as const;
+
+const SKILL_ROW_STYLE = { display: "flex", alignItems: "center", gap: 7, padding: "8px 8px", borderRadius: 5, cursor: "pointer" } as const;
+const SKILL_DOT_STYLE = { flexShrink: 0, width: 7, height: 7, borderRadius: "50%", transition: "background 0.15s, box-shadow 0.15s" } as const;
+const SKILL_NAME_STYLE = { fontSize: 12, fontFamily: "var(--font-mono)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
+const SKILL_GROUP_HEADER_STYLE = { padding: "4px 8px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" } as const;
+const SKILL_UPDATE_STYLE = { color: "#d97706", fontSize: 13, lineHeight: 1, flexShrink: 0 } as const;
+
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function buildSkillGroups(skills: Skill[]): { label: string; skills: Skill[] }[] {
+  return SKILL_GROUP_ORDER
+    .map((label) => ({
+      label,
+      skills: skills.filter((skill) => skillGroupLabel(skill) === label),
+    }))
+    .filter((group) => group.skills.length > 0);
+}
+
+function SkillListRow({ skill, isSelected, updateAvailable, onSelect, t }: {
+  skill: Skill;
+  isSelected: boolean;
+  updateAvailable: boolean;
+  onSelect: () => void;
+  t: Translate;
+}) {
+  const disabled = skill.disableModelInvocation;
+  return (
+    <div
+      onClick={onSelect}
+      style={{ ...SKILL_ROW_STYLE, background: isSelected ? "var(--bg-selected)" : "none" }}
+      onMouseEnter={(event) => {
+        if (!isSelected) event.currentTarget.style.background = "var(--bg-hover)";
+      }}
+      onMouseLeave={(event) => {
+        if (!isSelected) event.currentTarget.style.background = "none";
+      }}
+    >
+      <span style={{ ...SKILL_DOT_STYLE, background: disabled ? "var(--border)" : "var(--accent)", boxShadow: disabled ? "none" : "0 0 4px var(--accent)" }} />
+      <span style={{ ...SKILL_NAME_STYLE, fontWeight: isSelected ? 600 : 400, color: disabled ? "var(--text-dim)" : "var(--text)" }}>
+        {skill.name}
+      </span>
+      {updateAvailable && <span title={t("i18n.updateAvailable")} style={SKILL_UPDATE_STYLE}>↑</span>}
+    </div>
+  );
+}
+
+function SkillGroupBlock({ label, skills, dormantOpen, selected, addMode, updateStatuses, onSelect, onToggleDormant, t }: {
+  label: string;
+  skills: Skill[];
+  dormantOpen: boolean;
+  selected: string | null;
+  addMode: boolean;
+  updateStatuses: Record<string, SkillUpdateResult>;
+  onSelect: (skill: Skill) => void;
+  onToggleDormant: () => void;
+  t: Translate;
+}) {
+  const activeSkills = skills.filter((skill) => !skill.disableModelInvocation);
+  const dormantSkills = skills.filter((skill) => skill.disableModelInvocation);
+  const renderRow = (skill: Skill) => {
+    const key = updateKey(skill);
+    return (
+      <SkillListRow
+        key={skill.filePath}
+        skill={skill}
+        isSelected={!addMode && selected === skill.filePath}
+        updateAvailable={Boolean(key && updateStatuses[key]?.state === "update-available")}
+        onSelect={() => onSelect(skill)}
+        t={t}
+      />
+    );
+  };
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={SKILL_GROUP_HEADER_STYLE}>{label}</div>
+      {activeSkills.map(renderRow)}
+      {dormantSkills.length > 0 && (
+        <>
+          <div onClick={onToggleDormant} style={{ ...SKILL_GROUP_HEADER_STYLE, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", userSelect: "none" }}>
+            <span style={{ fontSize: 8 }}>{dormantOpen ? "▾" : "▸"}</span>
+            {t("i18n.dormant")} ({dormantSkills.length})
+          </div>
+          {dormantOpen && dormantSkills.map(renderRow)}
+        </>
+      )}
+    </div>
+  );
+}
+
 function shortVersion(version?: string): string {
   return version ? version.slice(0, 8) : "unknown";
 }
@@ -1447,188 +1543,28 @@ export function SkillsConfig({
                    {t("i18n.noSkills")}
                 </div>
               ) : (
-                (() => {
-                  const groups: { label: string; skills: typeof skills }[] = [];
-                  const groupDefinitions = [
-                    {
-                      label: "project / skills.sh",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "project" &&
-                        Boolean(skill.install?.skillsShUrl),
-                    },
-                    {
-                      label: "project",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "project" &&
-                        !skill.install?.skillsShUrl,
-                    },
-                    {
-                      label: "global / skills.sh",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "global" &&
-                        Boolean(skill.install?.skillsShUrl),
-                    },
-                    {
-                      label: "global",
-                      matches: (skill: Skill) =>
-                        sourceLabel(skill) === "global" &&
-                        !skill.install?.skillsShUrl,
-                    },
-                    {
-                      label: "path",
-                      matches: (skill: Skill) => sourceLabel(skill) === "path",
-                    },
-                  ];
-                  for (const { label, matches } of groupDefinitions) {
-                    const grpSkills = skills.filter(matches);
-                    if (grpSkills.length > 0)
-                      groups.push({ label, skills: grpSkills });
-                  }
-                  const renderSkillRow = (skill: Skill) => {
-                    const isSelected =
-                      !addMode && selected === skill.filePath;
-                    const disabled = skill.disableModelInvocation;
-                    return (
-                      <div
-                        key={skill.filePath}
-                        onClick={() => {
-                          setSelected(skill.filePath);
-                          setAddMode(false);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 7,
-                          padding: "8px 8px",
-                          borderRadius: 5,
-                          cursor: "pointer",
-                          background: isSelected
-                            ? "var(--bg-selected)"
-                            : "none",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected)
-                            e.currentTarget.style.background =
-                              "var(--bg-hover)";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSelected)
-                            e.currentTarget.style.background = "none";
-                        }}
-                      >
-                        <span
-                          style={{
-                            flexShrink: 0,
-                            width: 7,
-                            height: 7,
-                            borderRadius: "50%",
-                            background: disabled
-                              ? "var(--border)"
-                              : "var(--accent)",
-                            boxShadow: disabled
-                              ? "none"
-                              : "0 0 4px var(--accent)",
-                            transition:
-                              "background 0.15s, box-shadow 0.15s",
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: isSelected ? 600 : 400,
-                            color: disabled
-                              ? "var(--text-dim)"
-                              : "var(--text)",
-                            fontFamily: "var(--font-mono)",
-                            flex: 1,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {skill.name}
-                        </span>
-                        {(() => {
-                          const key = updateKey(skill);
-                          const status = key ? updateStatuses[key] : undefined;
-                          if (status?.state !== "update-available") return null;
-                          return (
-                            <span
-                               title={t("i18n.updateAvailable")}
-                              style={{
-                                color: "#d97706",
-                                fontSize: 13,
-                                lineHeight: 1,
-                                flexShrink: 0,
-                              }}
-                            >
-                              ↑
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    );
-                  };
-                  return groups.map(
-                    ({ label: grpLabel, skills: grpSkills }) => {
-                      const activeSkills = grpSkills.filter(
-                        (skill) => !skill.disableModelInvocation,
-                      );
-                      const dormantSkills = grpSkills.filter(
-                        (skill) => skill.disableModelInvocation,
-                      );
-                      const dormantOpen = dormantGroupsOpen[grpLabel] ?? false;
-                      return (
-                        <div key={grpLabel} style={{ marginBottom: 6 }}>
-                          <div
-                            style={{
-                              padding: "4px 8px 3px",
-                              fontSize: 10,
-                              fontWeight: 600,
-                              color: "var(--text-dim)",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.06em",
-                            }}
-                          >
-                            {grpLabel}
-                          </div>
-                          {activeSkills.map(renderSkillRow)}
-                          {dormantSkills.length > 0 && (
-                            <>
-                              <div
-                                onClick={() =>
-                                  setDormantGroupsOpen((current) => ({
-                                    ...current,
-                                    [grpLabel]: !dormantOpen,
-                                  }))
-                                }
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                  padding: "4px 8px 3px",
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  color: "var(--text-dim)",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.06em",
-                                  cursor: "pointer",
-                                  userSelect: "none",
-                                }}
-                              >
-                                <span style={{ fontSize: 8 }}>
-                                  {dormantOpen ? "▾" : "▸"}
-                                </span>
-                                {t("i18n.dormant")} ({dormantSkills.length})
-                              </div>
-                              {dormantOpen && dormantSkills.map(renderSkillRow)}
-                            </>
-                          )}
-                        </div>
-                      );
-                    },
-                  );
-                })()
+                buildSkillGroups(skills).map(({ label, skills: groupSkills }) => (
+                  <SkillGroupBlock
+                    key={label}
+                    label={label}
+                    skills={groupSkills}
+                    dormantOpen={dormantGroupsOpen[label] ?? false}
+                    selected={selected}
+                    addMode={addMode}
+                    updateStatuses={updateStatuses}
+                    onSelect={(skill) => {
+                      setSelected(skill.filePath);
+                      setAddMode(false);
+                    }}
+                    onToggleDormant={() => {
+                      setDormantGroupsOpen((current) => ({
+                        ...current,
+                        [label]: !(current[label] ?? false),
+                      }));
+                    }}
+                    t={t}
+                  />
+                ))
               )}
             </div>
           </div>

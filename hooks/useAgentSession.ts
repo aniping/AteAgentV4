@@ -870,40 +870,41 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     return true;
   }, [onAgentEnd]);
 
+  const isCurrentEventStreamGrace = useCallback((sid: string, generation: number) => (
+    generation === eventStreamGraceGenerationRef.current
+    && sessionIdRef.current === sid
+    && eventStreamGraceActiveRef.current
+  ), []);
+
+  const resumeActivePrompt = useCallback((data: { running?: boolean; state?: AgentStateResponse }) => {
+    const state = data.state;
+    if (!data.running || !state || (!state.isStreaming && !state.isPromptRunning)) return false;
+    eventStreamGraceActiveRef.current = false;
+    eventStreamGraceTimerRef.current = null;
+    sdkAgentActiveRef.current = Boolean(state.isStreaming);
+    rpcPromptPendingRef.current = Boolean(state.isPromptRunning);
+    agentRunningRef.current = true;
+    setAgentRunning(true);
+    setAgentPhase(state.isStreaming ? { kind: "waiting_model" } : { kind: "running_command" });
+    return true;
+  }, []);
+
   const scheduleEventStreamClose = useCallback((sid: string) => {
     cancelEventStreamGrace();
     eventStreamGraceActiveRef.current = true;
     const generation = eventStreamGraceGenerationRef.current;
 
     const checkServerIdle = async () => {
-      if (
-        generation !== eventStreamGraceGenerationRef.current
-        || sessionIdRef.current !== sid
-        || !eventStreamGraceActiveRef.current
-      ) return;
+      if (!isCurrentEventStreamGrace(sid, generation)) return;
 
       try {
         const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { running?: boolean; state?: AgentStateResponse };
-        if (
-          generation !== eventStreamGraceGenerationRef.current
-          || sessionIdRef.current !== sid
-          || !eventStreamGraceActiveRef.current
-        ) return;
+        if (!isCurrentEventStreamGrace(sid, generation)) return;
 
         const state = data.state;
-        const promptActive = Boolean(data.running && state && (state.isStreaming || state.isPromptRunning));
-        if (promptActive) {
-          eventStreamGraceActiveRef.current = false;
-          eventStreamGraceTimerRef.current = null;
-          sdkAgentActiveRef.current = Boolean(state?.isStreaming);
-          rpcPromptPendingRef.current = Boolean(state?.isPromptRunning);
-          agentRunningRef.current = true;
-          setAgentRunning(true);
-          setAgentPhase(state?.isStreaming ? { kind: "waiting_model" } : { kind: "running_command" });
-          return;
-        }
+        if (resumeActivePrompt(data)) return;
 
         if (data.running && state?.isCompacting) {
           setIsCompacting(true);
@@ -916,17 +917,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         closeEvents();
       } catch {
         // Keep the stream alive while state cannot be verified.
-        if (
-          generation !== eventStreamGraceGenerationRef.current
-          || sessionIdRef.current !== sid
-          || !eventStreamGraceActiveRef.current
-        ) return;
+        if (!isCurrentEventStreamGrace(sid, generation)) return;
         eventStreamGraceTimerRef.current = setTimeout(() => void checkServerIdle(), PROMPT_SETTLE_POLL_MS);
       }
     };
 
     eventStreamGraceTimerRef.current = setTimeout(() => void checkServerIdle(), EVENT_STREAM_IDLE_GRACE_MS);
-  }, [cancelEventStreamGrace, closeEvents]);
+  }, [cancelEventStreamGrace, closeEvents, isCurrentEventStreamGrace, resumeActivePrompt]);
 
   const finishPromptWithoutStream = useCallback(async (sid: string | null = sessionIdRef.current, runId = promptRunIdRef.current) => {
     // Bail out before loadSession too: a stale finish for a previous run
