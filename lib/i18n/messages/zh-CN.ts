@@ -85,6 +85,7 @@ export const zhCNLocale: LocalePlugin = {
     "directoryPicker.openBeforeSelecting": "选择前请先打开此路径",
     "directoryPicker.selectCurrentDirectory": "选择当前目录",
     "directoryPicker.selectThisFolder": "选择此文件夹",
+    "directoryPicker.noDrives": "未找到盘符",
     "sidebar.checking": "检查中…",
     "sidebar.open": "打开",
     "sidebar.cancel": "取消",

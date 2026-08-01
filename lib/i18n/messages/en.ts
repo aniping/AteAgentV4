@@ -85,6 +85,7 @@ export const enLocale: LocalePlugin = {
     "directoryPicker.openBeforeSelecting": "Open this path before selecting it",
     "directoryPicker.selectCurrentDirectory": "Select current directory",
     "directoryPicker.selectThisFolder": "Select this folder",
+    "directoryPicker.noDrives": "No drives found",
     "sidebar.checking": "Checking…",
     "sidebar.open": "Open",
     "sidebar.cancel": "Cancel",
