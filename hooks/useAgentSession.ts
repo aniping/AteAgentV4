@@ -1838,8 +1838,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   useLayoutEffect(() => {
     if (!streamState.isStreaming || !streamState.streamingMessage) return;
     const container = scrollContainerRef.current;
-    if (!container) return;
-    const target = getStreamingScrollTarget(container.scrollHeight, completionScrollAllowedRef.current);
+    const contentEnd = messagesEndRef.current;
+    if (!container || !contentEnd) return;
+    const contentEndTop = contentEnd.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    const target = getStreamingScrollTarget(contentEndTop, container.clientHeight, completionScrollAllowedRef.current);
     if (target === null) return;
     ignoreProgrammaticScrollUntilRef.current = Date.now() + PROGRAMMATIC_SCROLL_IGNORE_MS;
     container.scrollTo({ top: target, behavior: "instant" });

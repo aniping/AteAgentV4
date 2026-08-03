@@ -30,6 +30,11 @@ export function isScrollAtBottom(
   return scrollHeight - scrollTop - clientHeight <= threshold;
 }
 
-export function getStreamingScrollTarget(scrollHeight: number, shouldFollow: boolean): number | null {
-  return shouldFollow ? scrollHeight : null;
+/** Align the live content end with the viewport bottom, above any tail spacer. */
+export function getStreamingScrollTarget(
+  contentEnd: number,
+  clientHeight: number,
+  shouldFollow: boolean,
+): number | null {
+  return shouldFollow ? Math.max(0, contentEnd - clientHeight) : null;
 }
