@@ -44,6 +44,7 @@ const LANGUAGE_MENU_WIDTH = 176;
 const CENTER_MIN_WIDTH = 360;
 const DEFAULT_SIDEBAR_WIDTH = 260;
 const DEFAULT_RIGHT_PANEL_WIDTH_RATIO = 0.42;
+const RIGHT_PANEL_MAX_WIDTH_RATIO = 2 / 3;
 const SIDEBAR_WIDTH_STORAGE_KEY = "pi-sidebar-width";
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = "pi-right-panel-width";
 const SIDEBAR_RESIZE_CONFIG: PanelResizeConfig = {
@@ -53,7 +54,7 @@ const SIDEBAR_RESIZE_CONFIG: PanelResizeConfig = {
 };
 const RIGHT_PANEL_RESIZE_CONFIG: PanelResizeConfig = {
   minWidth: 300,
-  maxWidth: 960,
+  maxViewportRatio: RIGHT_PANEL_MAX_WIDTH_RATIO,
   collapseThreshold: 180,
 };
 
@@ -241,22 +242,31 @@ export function AppShell() {
     if (!shell) return;
 
     const viewportWidth = shell.getBoundingClientRect().width;
-    const defaultRightPanelWidth = Math.max(
-      RIGHT_PANEL_RESIZE_CONFIG.minWidth,
-      Math.min(
-        RIGHT_PANEL_RESIZE_CONFIG.maxWidth,
-        Math.round(viewportWidth * DEFAULT_RIGHT_PANEL_WIDTH_RATIO),
-      ),
-    );
     const sidebarWidth = parseStoredPanelWidth(
       window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY),
       DEFAULT_SIDEBAR_WIDTH,
       SIDEBAR_RESIZE_CONFIG,
     );
-    const rightPanelWidth = parseStoredPanelWidth(
-      window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY),
-      defaultRightPanelWidth,
+    const rightPanelMaxWidth = getAvailablePanelMaxWidth(
+      viewportWidth,
+      sidebarWidth,
+      CENTER_MIN_WIDTH,
       RIGHT_PANEL_RESIZE_CONFIG,
+    );
+    const defaultRightPanelWidth = Math.max(
+      RIGHT_PANEL_RESIZE_CONFIG.minWidth,
+      Math.min(
+        rightPanelMaxWidth,
+        Math.round(viewportWidth * DEFAULT_RIGHT_PANEL_WIDTH_RATIO),
+      ),
+    );
+    const rightPanelWidth = Math.min(
+      rightPanelMaxWidth,
+      parseStoredPanelWidth(
+        window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY),
+        defaultRightPanelWidth,
+        RIGHT_PANEL_RESIZE_CONFIG,
+      ),
     );
 
     setSidebarWidth(sidebarWidth);
@@ -929,7 +939,7 @@ export function AppShell() {
         "--sidebar-width": `${sidebarWidth}px`,
         "--sidebar-min-width": `${SIDEBAR_RESIZE_CONFIG.minWidth}px`,
         "--right-panel-width": rightPanelWidth === null
-          ? `clamp(${RIGHT_PANEL_RESIZE_CONFIG.minWidth}px, ${DEFAULT_RIGHT_PANEL_WIDTH_RATIO * 100}vw, ${RIGHT_PANEL_RESIZE_CONFIG.maxWidth}px)`
+          ? `clamp(${RIGHT_PANEL_RESIZE_CONFIG.minWidth}px, ${DEFAULT_RIGHT_PANEL_WIDTH_RATIO * 100}vw, ${RIGHT_PANEL_MAX_WIDTH_RATIO * 100}vw)`
           : `${rightPanelWidth}px`,
         "--right-panel-min-width": `${RIGHT_PANEL_RESIZE_CONFIG.minWidth}px`,
         display: "flex",
