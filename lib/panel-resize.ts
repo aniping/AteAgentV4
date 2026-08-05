@@ -1,6 +1,7 @@
 export type PanelResizeConfig = {
   minWidth: number;
-  maxWidth: number;
+  maxWidth?: number;
+  maxViewportRatio?: number;
   collapseThreshold: number;
 };
 
@@ -11,7 +12,12 @@ export function getAvailablePanelMaxWidth(
   config: PanelResizeConfig,
 ): number {
   const availableWidth = viewportWidth - otherPanelWidth - centerMinWidth;
-  return Math.max(config.minWidth, Math.min(config.maxWidth, availableWidth));
+  const configuredMaxWidth = Math.min(
+    config.maxWidth ?? Number.POSITIVE_INFINITY,
+    viewportWidth * (config.maxViewportRatio ?? 1),
+  );
+  // 面板上限还要受中心工作区可用空间约束，避免预览区挤掉主要操作区域。
+  return Math.max(config.minWidth, Math.min(configuredMaxWidth, availableWidth));
 }
 
 export function clampPanelDragWidth(width: number, maxWidth: number): number {
@@ -37,5 +43,8 @@ export function parseStoredPanelWidth(
 ): number {
   const parsed = Number(storedWidth);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallbackWidth;
-  return Math.max(config.minWidth, Math.min(config.maxWidth, parsed));
+  return Math.max(
+    config.minWidth,
+    Math.min(config.maxWidth ?? Number.POSITIVE_INFINITY, parsed),
+  );
 }
