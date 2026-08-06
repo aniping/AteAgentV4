@@ -28,3 +28,20 @@ test("portable builds trace Pi runtime assets loaded dynamically from disk", asy
     else process.env.PI_WEB_STANDALONE = previousStandalone;
   }
 });
+
+test("portable builds trace the bundled MCP Adapter dependency closure", async () => {
+  const previousStandalone = process.env.PI_WEB_STANDALONE;
+  process.env.PI_WEB_STANDALONE = "1";
+  try {
+    const standaloneJiti = createJiti(import.meta.url, { moduleCache: false });
+    const { default: config } = await standaloneJiti.import("./next.config.ts");
+    const includes = config.outputFileTracingIncludes?.["/*"] ?? [];
+
+    assert.ok(includes.includes("./node_modules/pi-mcp-adapter/**/*"));
+    assert.ok(includes.includes("./node_modules/@modelcontextprotocol/client/**/*"));
+    assert.ok(includes.includes("./node_modules/@napi-rs/keyring-win32-x64-msvc/**/*"));
+  } finally {
+    if (previousStandalone === undefined) delete process.env.PI_WEB_STANDALONE;
+    else process.env.PI_WEB_STANDALONE = previousStandalone;
+  }
+});

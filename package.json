@@ -44,6 +44,7 @@
     "@earendil-works/pi-tui": "0.83.0",
     "jszip": "^3.10.1",
     "next": "16.2.12",
+    "pi-mcp-adapter": "2.20.1",
     "proper-lockfile": "4.1.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

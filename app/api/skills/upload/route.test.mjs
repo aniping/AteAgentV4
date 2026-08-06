@@ -26,32 +26,15 @@ test("skill ZIP upload rejects a malformed archive without writing it", async ()
   assert.match(body.error, /Invalid or corrupted ZIP/);
 });
 
-test("MCP adapter reuse follows Pi's resolved extension state", async () => {
-  const { hasUsableMcpAdapter } = await jiti.import("@/lib/mcp-adapter");
-  const resource = (scope, enabled = true) => ({
-    path: "C:/packages/pi-mcp-adapter/extensions/index.js",
-    enabled,
-    metadata: { source: "npm:pi-mcp-adapter", scope, origin: "package" },
-  });
+test("MCP 集成使用内置 Adapter 而不再在线安装", async () => {
+  const source = await readFile(new URL("./route.ts", import.meta.url), "utf8");
+  const ensureMcpSource = source.slice(
+    source.indexOf("async ensureMcpSupport()"),
+    source.indexOf("    });", source.indexOf("async ensureMcpSupport()")),
+  );
 
-  assert.equal(hasUsableMcpAdapter([resource("project")], "project"), true);
-  assert.equal(hasUsableMcpAdapter([resource("project")], "global"), false);
-  assert.equal(hasUsableMcpAdapter([resource("user")], "project"), true);
-  assert.equal(hasUsableMcpAdapter([resource("user")], "global"), true);
-  assert.equal(hasUsableMcpAdapter([resource("project", false)], "project"), false);
-  assert.equal(hasUsableMcpAdapter([resource("temporary")], "project"), false);
-  assert.equal(
-    hasUsableMcpAdapter([
-      { ...resource("user"), metadata: { ...resource("user").metadata, source: "npm:another-adapter" } },
-    ], "project"),
-    false,
-  );
-  assert.equal(
-    hasUsableMcpAdapter([
-      { ...resource("project"), metadata: { ...resource("project").metadata, origin: "top-level" } },
-    ], "project"),
-    false,
-  );
+  assert.match(ensureMcpSource, /getBundledMcpAdapterResources\(\)/);
+  assert.doesNotMatch(ensureMcpSource, /installAndPersist|MCP_ADAPTER_SOURCE/);
 });
 
 test("a successful project upload records the explicit project trust decision", async () => {
