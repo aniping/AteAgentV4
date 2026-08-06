@@ -163,6 +163,7 @@ npm run dev
 - **PWA**：支持安装到桌面或主屏幕，并在本地服务暂时不可用时显示 ATE Agent 离线页；前端静态资源采用网络优先、缓存回退策略，iOS 会适配安全区和软键盘高度。
 - **Skill 管理**：搜索、安装、上传、更新、启停和卸载 Skill，并分组显示已启用与休眠技能。
 - **插件管理**：支持通过 npm、Git、本地路径或粘贴安装命令添加和管理 pi 扩展包，并提供官方扩展目录入口。
+- **内置 MCP**：安装包自带 MCP Adapter 及配套 Skill；升级时会移除用户全局安装的旧 Adapter，但保留服务器配置、集成运行时、缓存和 OAuth 凭据。
 - **集成安装包**：支持包含 Skill、运行时和可选 MCP 服务的通用 ZIP。
 
 ## Skill 与集成 ZIP
@@ -198,6 +199,8 @@ my-skill.zip
 ```
 
 `platform`、`arch`、`mcp.args` 和 `mcp.env` 可以省略。MCP 工具通过协议自动发现，不需要在清单中枚举工具名。
+
+ATE Agent 已内置 MCP Adapter，安装集成 ZIP 时不会再联网补装 Adapter。项目在 `.pi/settings.json` 中显式声明自己的 Adapter 时，继续由项目版本接管，避免同一会话重复注册 MCP 工具。
 
 上传限制为 ZIP 512MB、解压内容 1GB。安装器会拒绝危险路径、符号链接、校验和不匹配、多 Skill、平台或架构不兼容，以及覆盖已有目标的压缩包。
 

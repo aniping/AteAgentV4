@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
-import {
-  DefaultPackageManager,
-  getAgentDir,
-  SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { parseFormDataWithinLimit, RequestBodyTooLargeError } from "@/lib/bounded-form-data";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
-import { hasUsableMcpAdapter, isMcpAdapterSource, MCP_ADAPTER_SOURCE } from "@/lib/mcp-adapter";
+import { getBundledMcpAdapterResources } from "@/lib/mcp-adapter";
 import {
   parseSkillArchive,
   SkillArchiveConflictError,
@@ -90,28 +86,8 @@ export async function POST(request: Request) {
       cwd,
       agentDir,
       async ensureMcpSupport() {
-        const settingsManager = SettingsManager.create(cwd, agentDir, {
-          projectTrusted: projectTrust.trusted,
-        });
-        const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
-        const resolved = await packageManager.resolve(async () => "skip" as const);
-        if (hasUsableMcpAdapter(resolved.extensions, scope)) {
-          return false;
-        }
-        const configured = packageManager.listConfiguredPackages();
-        const requestedScope = scope === "project" ? "project" : "user";
-        const requested = configured.find(
-          (pkg) => pkg.scope === requestedScope && isMcpAdapterSource(pkg.source),
-        );
-        await packageManager.installAndPersist(requested?.source ?? MCP_ADAPTER_SOURCE, {
-          local: scope === "project",
-        });
-        if (scope === "project") trustProject(cwd, agentDir);
-        const installed = await packageManager.resolve(async () => "skip" as const);
-        if (!hasUsableMcpAdapter(installed.extensions, scope)) {
-          throw new SkillArchiveError(`pi-mcp-adapter is disabled or filtered in the ${scope} scope`);
-        }
-        return true;
+        getBundledMcpAdapterResources();
+        return false;
       },
     });
     if (scope === "project") trustProject(cwd, agentDir);

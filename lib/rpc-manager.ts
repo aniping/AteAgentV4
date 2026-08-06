@@ -1,5 +1,14 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, Theme } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSessionFromServices,
+  createAgentSessionServices,
+  DefaultPackageManager,
+  getAgentDir,
+  initTheme,
+  SessionManager,
+  SettingsManager,
+  Theme,
+} from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager as TuiKeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { randomUUID } from "crypto";
 import { existsSync, realpathSync, writeFileSync } from "fs";
@@ -8,6 +17,7 @@ import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { isModelAllowedByConfig } from "./models-config";
 import { readModelsConfig } from "./models-config-file";
+import { prepareBundledMcpAdapter } from "./mcp-adapter";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
@@ -1239,6 +1249,19 @@ export async function startRpcSession(
     // Some extensions access the SDK's global theme even outside the terminal UI.
     initTheme();
     const agentDir = getAgentDir();
+    const projectTrust = getProjectTrustStatus(sessionCwd, agentDir);
+    const settingsManager = SettingsManager.create(sessionCwd, agentDir, {
+      projectTrusted: projectTrust.trusted,
+    });
+    const packageManager = new DefaultPackageManager({
+      cwd: sessionCwd,
+      agentDir,
+      settingsManager,
+    });
+    const {
+      extensionPaths: mcpExtensionPaths,
+      skillPaths: mcpSkillPaths,
+    } = await prepareBundledMcpAdapter(packageManager);
 
     // Determine which tools to pass based on requested toolNames.
     // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
@@ -1266,7 +1289,10 @@ export async function startRpcSession(
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
+      settingsManager,
       resourceLoaderOptions: {
+        additionalExtensionPaths: mcpExtensionPaths,
+        additionalSkillPaths: mcpSkillPaths,
         extensionFactories: [createPromptLocaleExtension(promptLocaleState)],
       },
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
