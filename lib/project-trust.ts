@@ -1,14 +1,27 @@
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ProjectTrustStatus } from "./api-types";
 
+function canonicalizeProjectPath(cwd: string): string {
+  if (!cwd) return cwd;
+  try {
+    // Windows 的 native realpath 会把 ADMINI~1 等 8.3 别名统一成长路径，避免信任记录分裂。
+    return process.platform === "win32" ? realpathSync.native(cwd) : realpathSync(cwd);
+  } catch {
+    return resolve(cwd);
+  }
+}
+
 export function getProjectTrustStatus(cwd: string, agentDir: string): ProjectTrustStatus {
-  const requiresTrust = Boolean(cwd) && hasTrustRequiringProjectResources(cwd);
+  const projectPath = canonicalizeProjectPath(cwd);
+  const requiresTrust = Boolean(projectPath) && hasTrustRequiringProjectResources(projectPath);
   if (!requiresTrust) return { requiresTrust: false, trusted: true };
 
   const trustStore = new ProjectTrustStore(agentDir);
   return {
     requiresTrust: true,
-    trusted: trustStore.get(cwd) === true,
+    trusted: trustStore.get(projectPath) === true,
   };
 }
 
@@ -16,7 +29,7 @@ export function trustProject(cwd: string, agentDir: string): ProjectTrustStatus 
   const status = getProjectTrustStatus(cwd, agentDir);
   if (!status.requiresTrust) return status;
 
-  new ProjectTrustStore(agentDir).set(cwd, true);
+  new ProjectTrustStore(agentDir).set(canonicalizeProjectPath(cwd), true);
   return { requiresTrust: true, trusted: true };
 }
 
@@ -44,5 +57,6 @@ export function projectTrustReloadOptions(
   const status = getProjectTrustStatus(cwd, agentDir);
   if (!status.requiresTrust) return undefined;
   const trustStore = new ProjectTrustStore(agentDir);
-  return { resolveProjectTrust: async () => trustStore.get(cwd) === true };
+  const projectPath = canonicalizeProjectPath(cwd);
+  return { resolveProjectTrust: async () => trustStore.get(projectPath) === true };
 }

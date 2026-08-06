@@ -419,6 +419,7 @@ export const zhCNLocale: LocalePlugin = {
     "i18n.automaticChecksUnavailable": "自动检查不可用",
     "i18n.checkFailed": "检查失败",
     "i18n.installed": "已安装",
+    "i18n.builtin": "内置",
     "i18n.status": "状态",
     "i18n.version": "版本",
     "i18n.package": "包",

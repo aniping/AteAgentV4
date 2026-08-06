@@ -419,6 +419,7 @@ export const enLocale: LocalePlugin = {
     "i18n.automaticChecksUnavailable": "Automatic checks unavailable",
     "i18n.checkFailed": "Check failed",
     "i18n.installed": "Installed",
+    "i18n.builtin": "Built in",
     "i18n.status": "Status",
     "i18n.version": "Version",
     "i18n.package": "Package",
