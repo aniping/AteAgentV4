@@ -470,7 +470,7 @@ export function AddPluginPanel({
   );
 }
 
-function PackageDetail({
+export function PackageDetail({
   pkg,
   cwd,
   busyKey,
@@ -499,13 +499,29 @@ function PackageDetail({
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 680 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, minWidth: 0, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 180, flex: 1 }}>
-          <Toggle
-            enabled={enabled}
-            loading={busy || reloadBusy}
-            onToggle={() => onAction(pkg.disabled ? "enable" : "disable", pkg)}
-            label={pkg.disabled ? t("i18n.enablePackage") : t("i18n.disablePackage")}
-          />
-          <ScopeTag scope={pkg.scope} />
+          {pkg.builtin ? (
+            <span
+              style={{
+                fontSize: 10,
+                padding: "1px 5px",
+                borderRadius: 3,
+                background: "rgba(59,130,246,0.12)",
+                color: "var(--accent)",
+              }}
+            >
+              {t("i18n.builtin")}
+            </span>
+          ) : (
+            <>
+              <Toggle
+                enabled={enabled}
+                loading={busy || reloadBusy}
+                onToggle={() => onAction(pkg.disabled ? "enable" : "disable", pkg)}
+                label={pkg.disabled ? t("i18n.enablePackage") : t("i18n.disablePackage")}
+              />
+              <ScopeTag scope={pkg.scope} />
+            </>
+          )}
           {pkg.disabled ? (
             <span
               style={{
@@ -546,13 +562,15 @@ function PackageDetail({
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            onClick={() => onAction("update", pkg)}
-            disabled={busy || reloadBusy}
-            style={buttonStyle(busy || reloadBusy)}
-          >
-             {busyKey === `update:${key}` ? t("i18n.updating") : t("i18n.update")}
-          </button>
+          {!pkg.builtin && (
+            <button
+              onClick={() => onAction("update", pkg)}
+              disabled={busy || reloadBusy}
+              style={buttonStyle(busy || reloadBusy)}
+            >
+              {busyKey === `update:${key}` ? t("i18n.updating") : t("i18n.update")}
+            </button>
+          )}
           <button
             onClick={onReloadSession}
             disabled={!sessionId || reloadBusy || busy}
@@ -561,13 +579,15 @@ function PackageDetail({
           >
              {reloadBusy ? t("i18n.reloading") : t("i18n.reloadSession")}
           </button>
-          <button
-            onClick={() => onAction("remove", pkg)}
-            disabled={busy || reloadBusy}
-            style={buttonStyle(busy || reloadBusy, true)}
-          >
-             {busyKey === `remove:${key}` ? t("i18n.removing") : t("i18n.remove")}
-          </button>
+          {!pkg.builtin && (
+            <button
+              onClick={() => onAction("remove", pkg)}
+              disabled={busy || reloadBusy}
+              style={buttonStyle(busy || reloadBusy, true)}
+            >
+              {busyKey === `remove:${key}` ? t("i18n.removing") : t("i18n.remove")}
+            </button>
+          )}
         </div>
       </div>
 

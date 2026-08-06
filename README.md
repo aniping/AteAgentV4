@@ -212,6 +212,7 @@ ATE Agent 已内置 MCP Adapter，安装集成 ZIP 时不会再联网补装 Adap
 
 ```cmd
 npm run dev
+npm test
 npm run lint
 npx tsc --noEmit
 npm run build

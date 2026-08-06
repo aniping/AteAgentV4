@@ -1,5 +1,7 @@
 import type { PackageManager } from "@earendil-works/pi-coding-agent";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { PluginPackageInfo } from "./api-types";
 
 const MCP_ADAPTER_SOURCE = "npm:pi-mcp-adapter";
 
@@ -14,6 +16,49 @@ export function getBundledMcpAdapterResources(): BundledMcpAdapterResources {
   return {
     extensionPaths: [join(packageRoot, "index.ts")],
     skillPaths: [join(packageRoot, "skills")],
+  };
+}
+
+function readBundledMcpAdapterVersion(packageRoot: string): string | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      version?: unknown;
+    };
+    return typeof parsed.version === "string" ? parsed.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function getBundledMcpAdapterPluginInfo(enabled = true): PluginPackageInfo {
+  const bundled = getBundledMcpAdapterResources();
+  const extensionPath = bundled.extensionPaths[0];
+  const skillPath = join(bundled.skillPaths[0], "mcp-scripting", "SKILL.md");
+  const packageRoot = join(process.cwd(), "node_modules", "pi-mcp-adapter");
+  const extensionLoaded = enabled && existsSync(extensionPath);
+  const skillLoaded = enabled && existsSync(skillPath);
+  const counts = {
+    extensions: extensionLoaded ? 1 : 0,
+    skills: skillLoaded ? 1 : 0,
+    prompts: 0,
+    themes: 0,
+  };
+  const resources = [
+    ...(extensionLoaded ? [{ kind: "extension" as const, name: "pi-mcp-adapter", path: extensionPath, relativePath: "index.ts" }] : []),
+    ...(skillLoaded ? [{ kind: "skill" as const, name: "mcp-scripting", path: skillPath, relativePath: "skills/mcp-scripting/SKILL.md" }] : []),
+  ];
+  return {
+    source: "pi-mcp-adapter",
+    scope: "global",
+    builtin: true,
+    filtered: false,
+    disabled: !enabled,
+    installedPath: existsSync(packageRoot) ? packageRoot : undefined,
+    packageName: "pi-mcp-adapter",
+    version: readBundledMcpAdapterVersion(packageRoot),
+    counts,
+    resources,
+    status: !enabled ? "disabled" : extensionLoaded && skillLoaded ? "loaded" : "missing",
   };
 }
 

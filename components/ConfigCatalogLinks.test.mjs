@@ -9,7 +9,7 @@ const jiti = createJiti(import.meta.url, {
   tsconfigPaths: true,
 });
 const { AddSkillPanel, SkillDetail, SkillsConfig } = await jiti.import("./SkillsConfig.tsx");
-const { AddPluginPanel, PluginsConfig } = await jiti.import("./PluginsConfig.tsx");
+const { AddPluginPanel, PackageDetail, PluginsConfig } = await jiti.import("./PluginsConfig.tsx");
 const { I18nProvider } = await jiti.import("@/hooks/useI18n");
 
 function withI18n(element) {
@@ -85,6 +85,37 @@ test("plugin installation links to the filtered Pi extension catalog", () => {
   }));
 
   assert.match(html, /Browse <a href="https:\/\/pi\.dev\/packages\?type=extension" target="_blank" rel="noreferrer"[^>]*>pi\.dev\/packages<\/a> to discover and install Pi plugins/);
+});
+
+test("bundled plugins are visible but cannot be managed as user packages", () => {
+  const html = withI18n(React.createElement(PackageDetail, {
+    pkg: {
+      source: "pi-mcp-adapter",
+      scope: "global",
+      builtin: true,
+      filtered: false,
+      disabled: false,
+      installedPath: "C:/ATE Agent/node_modules/pi-mcp-adapter",
+      packageName: "pi-mcp-adapter",
+      version: "2.20.1",
+      counts: { extensions: 1, skills: 1, prompts: 0, themes: 0 },
+      resources: [],
+      status: "loaded",
+    },
+    cwd: "C:/project",
+    busyKey: null,
+    actionError: null,
+    actionMessage: null,
+    sessionId: null,
+    onAction() {},
+    onReloadSession() {},
+  }));
+
+  assert.match(html, /Built in/);
+  assert.match(html, /pi-mcp-adapter/);
+  assert.doesNotMatch(html, />Update</);
+  assert.doesNotMatch(html, />Remove</);
+  assert.doesNotMatch(html, /Disable package/);
 });
 
 test("skill and plugin dialogs expose add actions before their lists", () => {

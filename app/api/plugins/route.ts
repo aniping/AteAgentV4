@@ -12,6 +12,7 @@ import {
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 import { getProjectTrustStatus } from "@/lib/project-trust";
+import { getBundledMcpAdapterPluginInfo, prepareBundledMcpAdapter } from "@/lib/mcp-adapter";
 import type {
   PluginDiagnostic,
   PluginPackageInfo,
@@ -212,6 +213,8 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
     agentDir,
     settingsManager,
   });
+  // 插件页也可能是升级后的首个入口；先迁移旧全局包，避免与内置 Adapter 重复展示和计数。
+  const bundledMcpAdapter = await prepareBundledMcpAdapter(packageManager);
 
   const diagnostics: PluginDiagnostic[] = [];
   let countsByPackage = new Map<string, PluginResourceCounts>();
@@ -236,7 +239,12 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
     });
   }
 
-  const packages = packageManager.listConfiguredPackages().map((pkg) => {
+  const configuredPackages = packageManager.listConfiguredPackages();
+  const builtinAdapter = getBundledMcpAdapterPluginInfo(bundledMcpAdapter.extensionPaths.length > 0);
+  for (const kind of ["extensions", "skills", "prompts", "themes"] as const) {
+    totals[kind] += builtinAdapter.counts[kind];
+  }
+  const packages = configuredPackages.map((pkg) => {
     const scope = toPluginScope(pkg.scope);
     const key = keyFor(pkg.source, scope);
     const disabled = disabledByPackage.get(key) ?? false;
@@ -267,7 +275,7 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
   });
 
   return {
-    packages,
+    packages: [builtinAdapter, ...packages],
     totals,
     diagnostics,
     projectResourcesLoaded: projectTrust.trusted,
