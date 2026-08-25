@@ -19,6 +19,26 @@ function filterPatterns(pattern, root) {
   return isTraceGlobOutsideRoot(pattern, root) ? [] : pattern;
 }
 
+function isTracePathOutsideRoot(candidate, root, base = root) {
+  if (typeof candidate !== "string") return false;
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedCandidate = path.isAbsolute(candidate)
+    ? path.resolve(candidate)
+    : path.resolve(base, candidate);
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
+  return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+}
+
+function createTraceIgnore(root, base, originalIgnore) {
+  return (candidate, ...args) => {
+    if (isTracePathOutsideRoot(candidate, root, base)) return true;
+    return typeof originalIgnore === "function"
+      ? Boolean(originalIgnore(candidate, ...args))
+      : false;
+  };
+}
+
 const traceRoot = process.env.PI_WEB_TRACE_ROOT || process.cwd();
 const globModulePath = require.resolve("next/dist/compiled/glob");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -47,4 +67,33 @@ filteredGlob.sync = (pattern, options) => {
 };
 require.cache[globModulePath].exports = filteredGlob;
 
-module.exports = { filterPatterns, isTraceGlobOutsideRoot };
+// Next 16.3 bundles glob inside @vercel/nft, so patching next/dist/compiled/glob
+// no longer protects output tracing from absolute paths outside the portable app.
+// Wrap NFT's ignore callback as well, preserving Next's own ignore rules.
+const nftModulePath = require.resolve("next/dist/compiled/@vercel/nft");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const nftModule = require(nftModulePath);
+const nftPatchMarker = Symbol.for("ate-agent.portable-nft-trace-filter");
+if (!nftModule[nftPatchMarker]) {
+  const originalNodeFileTrace = nftModule.nodeFileTrace;
+  async function filteredNodeFileTrace(entries, options = {}) {
+    const base = options.base || traceRoot;
+    return originalNodeFileTrace.call(this, entries, {
+      ...options,
+      ignore: createTraceIgnore(traceRoot, base, options.ignore),
+    });
+  }
+  Object.defineProperty(nftModule, "nodeFileTrace", {
+    configurable: true,
+    enumerable: true,
+    value: filteredNodeFileTrace,
+  });
+  Object.defineProperty(nftModule, nftPatchMarker, { value: true });
+}
+
+module.exports = {
+  createTraceIgnore,
+  filterPatterns,
+  isTraceGlobOutsideRoot,
+  isTracePathOutsideRoot,
+};

@@ -1,16 +1,18 @@
 import type { NextConfig } from "next";
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import { MAX_SKILL_UPLOAD_REQUEST_BYTES } from "./lib/skill-archive-limits";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { MAX_SKILL_UPLOAD_REQUEST_BYTES } from "./lib/skill-archive-limits.ts";
 
-const { version } = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")) as { version: string };
+const configDir = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(readFileSync(join(configDir, "package.json"), "utf8")) as { version: string };
 const standaloneBuild = process.env.PI_WEB_STANDALONE === "1";
 
 function collectPackageTraceGlobs(rootPackage: string): string[] {
   const packages = new Set<string>();
   const visit = (packageName: string): void => {
     if (packages.has(packageName)) return;
-    const manifestPath = join(__dirname, "node_modules", ...packageName.split("/"), "package.json");
+    const manifestPath = join(configDir, "node_modules", ...packageName.split("/"), "package.json");
     if (!existsSync(manifestPath)) return;
 
     packages.add(packageName);
@@ -30,11 +32,12 @@ function collectPackageTraceGlobs(rootPackage: string): string[] {
 const bundledMcpTraceGlobs = standaloneBuild ? collectPackageTraceGlobs("pi-mcp-adapter") : [];
 let piVersion = "unknown";
 try {
-  const piPkgPath = join(__dirname, "node_modules/@earendil-works/pi-coding-agent/package.json");
+  const piPkgPath = join(configDir, "node_modules/@earendil-works/pi-coding-agent/package.json");
   piVersion = (JSON.parse(readFileSync(piPkgPath, "utf8")) as { version: string }).version;
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: configDir,
   ...(standaloneBuild ? {
     output: "standalone" as const,
     outputFileTracingIncludes: {
@@ -51,7 +54,7 @@ const nextConfig: NextConfig = {
     "@earendil-works/pi-ai",
     "@earendil-works/pi-tui",
   ],
-  allowedDevOrigins: ['192.168.*.*'],
+  allowedDevOrigins: ["127.0.0.1", "192.168.*.*"],
   async headers() {
     return [
       {

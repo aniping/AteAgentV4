@@ -24,7 +24,7 @@ export function findTestFiles(root) {
 export function runTests(root) {
   const files = findTestFiles(root);
   // 显式传入测试文件，避免 Node 把 models-config/test 等生产路由目录误判为测试目录。
-  const result = spawnSync(process.execPath, ["--test", ...files], {
+  const result = spawnSync(process.execPath, ["--experimental-strip-types", "--test", ...files], {
     cwd: root,
     stdio: "inherit",
   });
