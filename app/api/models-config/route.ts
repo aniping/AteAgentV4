@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { invalidateModelsCache } from "@/lib/models-cache";
-import { normalizeModelsConfig, type ModelsConfig } from "@/lib/models-config";
-import { readModelsConfig, writeModelsConfig } from "@/lib/models-config-file";
+import { readModelsConfig, writeModelsConfig } from "@/lib/models-config-store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +9,9 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const body = await req.json() as ModelsConfig;
-    const config = normalizeModelsConfig(body);
-    writeModelsConfig(config);
-    invalidateModelsCache();
-    return NextResponse.json({ success: true, config });
+    const body = await req.json() as Record<string, unknown>;
+    writeModelsConfig(body);
+    return NextResponse.json({ success: true, config: readModelsConfig() });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
