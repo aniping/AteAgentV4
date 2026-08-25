@@ -24,6 +24,9 @@
     "!.next/dev",
     "!.next/**/*.js.map",
     "public",
+    "bundled-resources/bundle.json",
+    "bundled-resources/scenes/*/AGENTS.md",
+    "bundled-resources/scenes/*/skills/.gitkeep",
     "next.config.ts",
     "package.json"
   ],

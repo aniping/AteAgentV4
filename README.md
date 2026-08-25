@@ -1,31 +1,42 @@
-# ATE Agent
+# Wireless ATE Agent
 
-ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基于 [pi coding agent](https://github.com/badlogic/pi-mono) 提供浏览器工作界面。
+Wireless ATE Agent 是面向无线装备研发与调试场景的本地智能助手，基于 [pi coding agent](https://github.com/badlogic/pi-mono) 提供浏览器工作界面。
 
 它可以管理本机会话、实时对话、模型配置、Skill 与插件，并支持浏览项目文件、Git 状态和 Worktree。
 
-各版本的新增能力、体验改进和问题修复见 [ATE Agent 版本特性](./CHANGELOG.md)。
+各版本的新增能力、体验改进和问题修复见 [Wireless ATE Agent 版本特性](./CHANGELOG.md)。
 
 > [!WARNING]
-> ATE Agent 可以调用本机工具和高权限智能体。默认不启用密码认证；不要直接暴露到互联网，局域网访问仅限可信网络。
+> Wireless ATE Agent 可以调用本机工具和高权限智能体。默认不启用密码认证；不要直接暴露到互联网，局域网访问仅限可信网络。
+
+## 五场景 Agent 框架
+
+界面按研发流程提供五个固定场景：需求、设计、开发、联调和测试。每个场景对应一个独立 Agent 职责文件，并只追加该场景声明的内置 Skill 路径；其中设计场景统一覆盖系统、射频、硬件、软件和 ATE 方案设计。
+
+- 新会话在第一次创建 AgentSession 时绑定场景，后续恢复和同场景分叉继续使用该场景资源。
+- 切换场景会打开目标场景的新会话输入页，不会静默修改已经存在的会话。
+- 历史会话按项目和场景双重筛选；升级前创建的会话显示在“未分类历史”，不会根据标题或内容猜测归类。
+- 用户全局/项目 Skill 仍按 Pi 原有规则加载；安装包内置 Skill 则由当前场景的资源清单追加。
+
+内置资源入口为 `bundled-resources/bundle.json`，五个场景的 `AGENTS.md` 和 Skill 预留目录位于 `bundled-resources/scenes/<scene>/`。后续把自研 Skill 目录（包含 `SKILL.md`）放入相应的 `skills/`，运行 `npm run package` 即会校验并复制到安装包的 `app/bundled-resources`。需要跨场景复用时，将 Skill 保留一份，并在多个场景的 `skillPaths` 中引用同一路径。
 
 ## 快速开始：使用 Windows 安装程序
 
 已经拿到发布包时，直接运行：
 
 ```text
-ATE-Agent-Setup-<版本>-win-<架构>.exe
+Wireless-ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
-安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。安装完成、双击带有红色图标的 `ATE-Agent.exe` 或快捷方式时都会显示 ATE Agent 状态主界面，不会自动打开网页；已经运行时再次双击只会唤醒主界面，不会重复启动 Node。
+安装程序默认安装到 `C:\Program Files\ATEAgent`，并创建桌面快捷方式、开始菜单快捷方式和卸载入口。安装完成、双击带有红色图标的 `ATE-Agent.exe` 或快捷方式时都会显示 Wireless ATE Agent 状态主界面，不会自动打开网页；已经运行时再次双击只会唤醒主界面，不会重复启动 Node。
 
-`ATE-Agent.exe` 会在服务运行期间保持常驻。状态主窗口分别显示 Agent 与 UI 版本，用户点击“打开 ATE Agent 工作台”后才会打开网页。双击托盘红色图标会显示主窗口；托盘右键可以打开网页、显示运行状态、重启服务或退出。显示主窗口时，带红色图标的任务栏项会同时出现；关闭窗口会将它隐藏回托盘并移除任务栏项，但不会停止服务。结束 `ATE-Agent.exe` 会同步结束其 Node 和工具子进程。`start.cmd` 仅作为兼容入口保留；也可以双击安装目录中的 `stop-all-server.exe` 停止全部相关进程。
+`ATE-Agent.exe` 会在服务运行期间保持常驻。状态主窗口分别显示 Agent 与 UI 版本，用户点击“打开 Wireless ATE Agent 工作台”后才会打开网页。双击托盘红色图标会显示主窗口；托盘右键可以打开网页、显示运行状态、重启服务或退出。显示主窗口时，带红色图标的任务栏项会同时出现；关闭窗口会将它隐藏回托盘并移除任务栏项，但不会停止服务。结束 `ATE-Agent.exe` 会同步结束其 Node 和工具子进程。`start.cmd` 仅作为兼容入口保留；也可以双击安装目录中的 `stop-all-server.exe` 停止全部相关进程。
 
 内置运行时按类型放置在 `runtime` 下；当前 Node.js 位于 `runtime\node`，以后增加其他运行时不会与 Node.js 文件混放。覆盖升级、同版本修复安装和回退到旧版都会替换内置 Node.js 与应用目录，因此 Node.js 和 Agent 会切换为目标安装包所带版本；用户 `.pi` 目录中的会话、Skill、插件和配置不会被覆盖。
 
 安装目录按用途划分：根目录只保留启动、停止、卸载和说明入口；`app` 存放 Web 应用，`runtime\node` 存放 Node.js，`support` 存放启动器内部文件。构建阶段使用的独立 ICO 文件不会安装到目标电脑。
 
-安装完成后双击 **ATE Agent** 快捷方式，本机浏览器访问：
+安装完成后双击 **Wireless ATE Agent** 快捷方式，本机浏览器访问：
 
 ```text
 http://127.0.0.1:30141
@@ -34,7 +45,7 @@ http://127.0.0.1:30141
 安装版默认监听 `0.0.0.0:30141`。同一可信局域网中的其他电脑可访问：
 
 ```text
-http://<运行 ATE Agent 电脑的局域网 IP>:30141
+http://<运行 Wireless ATE Agent 电脑的局域网 IP>:30141
 ```
 
 首次运行时，Windows 防火墙可能询问是否允许网络访问。当前本地构建的安装程序未进行代码签名，Windows 可能显示“未知发布者”；只安装来自可信来源的构建。
@@ -96,7 +107,7 @@ npm run package
 输出文件位于：
 
 ```text
-build\release\ATE-Agent-Setup-<版本>-win-<架构>.exe
+build\release\Wireless-ATE-Agent-Setup-<版本>-win-<架构>.exe
 ```
 
 构建脚本入口是 `scripts\package-installer.cmd`，内部使用 Node.js 完成构建、下载、SHA-256 校验和文件整理，不依赖 PowerShell。
@@ -135,7 +146,7 @@ set NO_PROXY=localhost,127.0.0.1
 npm run dev
 ```
 
-`PI_WEB_*` 和 `pi-web` CLI 名称暂时保留，用于兼容上游配置和已有自动化；用户界面品牌为 ATE Agent。
+`PI_WEB_*`、`pi-web` CLI、`ATE-Agent.exe`、`ATEAgent` 安装目录和旧注册表键暂时保留，用于兼容上游配置、已有自动化和原位升级；用户可见品牌为 Wireless ATE Agent。
 
 ## 数据目录与默认工作目录
 
@@ -146,13 +157,14 @@ npm run dev
 - 新会话的日期工作目录默认为 `~/ate-cwd-YYYYMMDD`。
 - 项目级 Skill 位于 `.pi/skills`，全局 Skill 位于 `~/.pi/agent/skills`。
 
-卸载 ATE Agent 只删除安装目录、快捷方式和卸载注册信息，不删除 `~/.pi/agent` 中的会话、模型或 Skill 数据。
+卸载 Wireless ATE Agent 只删除安装目录、快捷方式和卸载注册信息，不删除 `~/.pi/agent` 中的会话、模型或 Skill 数据。
 
 ## 主要功能
 
+- **场景化 Agent**：按需求、设计、开发、联调和测试加载不同 Agent 职责与内置 Skill，并按场景展示历史会话。
 - **会话管理**：按项目浏览、恢复、重命名、删除和分支会话。
 - **实时对话**：通过 SSE 接收模型输出、工具参数生成、执行进度、思考过程和状态更新，并在刷新、断网或跨标签页后恢复运行状态。
-- **双语提示词**：SDK 默认系统提示词跟随界面语言使用中文或英文，并统一使用 ATE Agent 品牌；项目自定义提示词和兼容性技术标识保持原样。
+- **双语提示词**：SDK 默认系统提示词跟随界面语言使用中文或英文，并统一使用 Wireless ATE Agent 品牌；项目自定义提示词和兼容性技术标识保持原样。
 - **模型配置**：可通过预置的 AteTest、Ascend 内部端点或自定义端点添加 Provider，并管理 API 地址、API Key、请求头、兼容参数、自定义模型、价格和 Thinking 等级；还可导入上游模型并从 models.dev 补全模型信息与价格。
 - **本地 API**：支持无需 API Key 的兼容接口配置与连通性测试。
 - **上下文管理**：显示 Token、费用与上下文占用，并提供压缩反馈。
@@ -160,7 +172,7 @@ npm run dev
 - **可调节布局**：桌面端可拖动左右分隔线调整侧边栏和文件面板宽度，文件面板最多可占窗口的三分之二；拖近边缘可收起面板，重新打开时恢复上次宽度。
 - **文件浏览**：预览源码、Diff、YAML 元数据、图片、音频、PDF 和 DOCX，并记住文件树与预览位置；Windows 目录选择器可直接切换可用盘符。
 - **Git 与 Worktree**：显示仓库状态，筛选并切换多个工作树。
-- **PWA**：支持安装到桌面或主屏幕、浏览器完成通知，并在本地服务暂时不可用时显示 ATE Agent 离线页；前端静态资源采用网络优先、缓存回退策略，iOS 会适配安全区和软键盘高度。
+- **PWA**：支持安装到桌面或主屏幕、浏览器完成通知，并在本地服务暂时不可用时显示 Wireless ATE Agent 离线页；前端静态资源采用网络优先、缓存回退策略，iOS 会适配安全区和软键盘高度。
 - **工具预设**：新会话可选择无工具、只读、默认或完整工具集，并记住最近一次显式选择。
 - **Skill 管理**：搜索、安装、上传、更新、启停和卸载 Skill，并分组显示已启用与休眠技能。
 - **插件管理**：支持通过 npm、Git、本地路径或粘贴安装命令添加和管理 pi 扩展包，并提供官方扩展目录入口。
@@ -201,7 +213,7 @@ my-skill.zip
 
 `platform`、`arch`、`mcp.args` 和 `mcp.env` 可以省略。MCP 工具通过协议自动发现，不需要在清单中枚举工具名。
 
-ATE Agent 已内置 MCP Adapter，安装集成 ZIP 时不会再联网补装 Adapter。项目在 `.pi/settings.json` 中显式声明自己的 Adapter 时，继续由项目版本接管，避免同一会话重复注册 MCP 工具。
+Wireless ATE Agent 已内置 MCP Adapter，安装集成 ZIP 时不会再联网补装 Adapter。项目在 `.pi/settings.json` 中显式声明自己的 Adapter 时，继续由项目版本接管，避免同一会话重复注册 MCP 工具。
 
 上传限制为 ZIP 512MB、解压内容 1GB。安装器会拒绝危险路径、符号链接、校验和不匹配、多 Skill、平台或架构不兼容，以及覆盖已有目标的压缩包。
 
@@ -234,6 +246,7 @@ components\             会话、对话、模型、Skill 和文件界面
 hooks\                  对话、主题、拖放与音频等前端状态
 lib\                    会话、Agent、文件、安全和配置逻辑
 scripts\                Windows 安装器与构建脚本
+bundled-resources\      五场景 Agent 描述与内置 Skill 资源
 public\                 静态资源
 docs\                   使用与安装包制作文档
 bin\pi-web.js           兼容的 npm CLI 入口

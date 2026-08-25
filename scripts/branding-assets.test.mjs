@@ -29,11 +29,11 @@ async function exists(file) {
   }
 }
 
-test("browser metadata uses the canonical ATE Agent icon", async () => {
+test("browser metadata uses the canonical Wireless ATE Agent icon", async () => {
   assert.equal(
     await exists(appFavicon),
     false,
-    "legacy app/favicon.ico overrides the ATE Agent browser icon",
+    "legacy app/favicon.ico overrides the Wireless ATE Agent browser icon",
   );
 
   const [browserIcon, layoutSource, installerSource] = await Promise.all([
@@ -43,24 +43,27 @@ test("browser metadata uses the canonical ATE Agent icon", async () => {
   ]);
   assert.match(browserIcon, /fill="#fb3a4e"/);
   assert.match(browserIcon, /M11\.4 34\.4 22\.8 10\.6 34\.4 34\.4/);
-  assert.match(layoutSource, /title:\s*"ATE Agent"/);
+  assert.match(layoutSource, /title:\s*"Wireless ATE Agent"/);
   assert.doesNotMatch(layoutSource, /Pi Web/i);
   assert.match(installerSource, /path\.join\(repoRoot, "app", "icon\.svg"\)/);
 });
 
-test("PWA metadata and assets use ATE Agent branding", async () => {
+test("PWA metadata and assets use Wireless ATE Agent branding", async () => {
   const brandedSources = await Promise.all([
     readFile(rootLayout, "utf8"),
     readFile(manifest, "utf8"),
     readFile(pwaRegistration, "utf8"),
     readFile(offlinePage, "utf8"),
-    readFile(serviceWorker, "utf8"),
   ]);
 
   for (const source of brandedSources) {
-    assert.match(source, /ATE Agent|ate-agent/);
+    assert.match(source, /Wireless ATE Agent/);
     assert.doesNotMatch(source, /Pi Web|pi-web/i);
   }
+
+  const serviceWorkerSource = await readFile(serviceWorker, "utf8");
+  assert.match(serviceWorkerSource, /ate-agent/);
+  assert.doesNotMatch(serviceWorkerSource, /Pi Web|pi-web/i);
 
   for (const [icon, expectedHash] of pwaIcons) {
     const actualHash = createHash("sha256").update(await readFile(icon)).digest("hex");
@@ -81,15 +84,15 @@ test("PWA fetches Next.js static assets before falling back to cache", async () 
   );
 });
 
-test("password authentication uses ATE Agent branding without Russian documentation", async () => {
+test("password authentication uses Wireless ATE Agent branding without Russian documentation", async () => {
   const [proxySource, launcherSource] = await Promise.all([
     readFile(webProxy, "utf8"),
     readFile(cliLauncher, "utf8"),
   ]);
 
-  assert.match(proxySource, /Basic realm="ATE Agent"/);
+  assert.match(proxySource, /Basic realm="Wireless ATE Agent"/);
   assert.doesNotMatch(proxySource, /Basic realm="Pi Web"/i);
-  assert.match(launcherSource, /Warning: ATE Agent is listening/);
+  assert.match(launcherSource, /Warning: Wireless ATE Agent is listening/);
   assert.doesNotMatch(launcherSource, /Warning: pi-web is listening/i);
   assert.equal(await exists(russianReadme), false);
 });

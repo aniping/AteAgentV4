@@ -7,6 +7,7 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { spawnSync } = require("node:child_process");
+const { copyBundledResources } = require("./bundled-resources.cjs");
 
 const repoRoot = path.resolve(__dirname, "..");
 const buildRoot = path.join(repoRoot, "build");
@@ -181,7 +182,7 @@ async function main() {
   const windowsVersion = toWindowsVersion(packageJson.version);
 
   const artifactName = `ate-agent-${packageJson.version}-win-${process.arch}`;
-  const installerName = `ATE-Agent-Setup-${packageJson.version}-win-${process.arch}`;
+  const installerName = `Wireless-ATE-Agent-Setup-${packageJson.version}-win-${process.arch}`;
   const stagingRoot = path.join(buildRoot, "installer", artifactName);
   const installerPath = path.join(releaseRoot, `${installerName}.exe`);
   const nodeArchiveName = `node-${process.version}-win-${process.arch}.zip`;
@@ -258,6 +259,7 @@ async function main() {
   copyContents(staticRoot, path.join(appRoot, ".next", "static"));
   const publicRoot = path.join(repoRoot, "public");
   if (fs.existsSync(publicRoot)) fs.cpSync(publicRoot, path.join(appRoot, "public"), { recursive: true });
+  copyBundledResources(path.join(repoRoot, "bundled-resources"), appRoot);
 
   removeRedundantNestedPackage(
     path.join(appRoot, "node_modules", "@mistralai", "mistralai"),
@@ -330,7 +332,7 @@ async function main() {
     launcherVersionSource,
   ]);
 
-  const packageReadme = `ATE Agent ${packageJson.version} Windows ${process.arch}\r\n\r\n` +
+  const packageReadme = `Wireless ATE Agent ${packageJson.version} Windows ${process.arch}\r\n\r\n` +
     `This installation includes Node.js ${process.version} with npm/npx; Node.js does not need to be installed separately.\r\n\r\n` +
     "Start:\r\n  Double-click ATE-Agent.exe\r\n\r\n" +
     "Stop:\r\n  Double-click stop-all-server.exe\r\n\r\n" +
@@ -339,7 +341,7 @@ async function main() {
     "Optional arguments:\r\n  ATE-Agent.exe -H 127.0.0.1        Listen on this computer only\r\n" +
     "  ATE-Agent.exe -H 0.0.0.0 -p 8080 Listen on all network interfaces with port 8080\r\n\r\n" +
     "Windows Defender Firewall may require an inbound rule for the selected port.\r\n" +
-    "ATE Agent has no application-level authentication. Never expose it directly to the internet.\r\n";
+    "Wireless ATE Agent has no application-level authentication. Never expose it directly to the internet.\r\n";
   fs.writeFileSync(path.join(stagingRoot, "README.txt"), packageReadme, "utf8");
 
   const requiredFiles = [
@@ -355,6 +357,12 @@ async function main() {
     "runtime/node/LICENSE",
     "app/server.js",
     "app/package.json",
+    "app/bundled-resources/bundle.json",
+    "app/bundled-resources/scenes/requirements/AGENTS.md",
+    "app/bundled-resources/scenes/design/AGENTS.md",
+    "app/bundled-resources/scenes/development/AGENTS.md",
+    "app/bundled-resources/scenes/integration/AGENTS.md",
+    "app/bundled-resources/scenes/testing/AGENTS.md",
     "app/.next/BUILD_ID",
     "app/node_modules/@earendil-works/pi-agent-core/package.json",
     "app/node_modules/@earendil-works/pi-ai/package.json",

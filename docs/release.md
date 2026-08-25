@@ -55,9 +55,9 @@ Run this after `npm run release` so the installer uses the newly bumped package 
 npm run package
 ```
 
-The command creates `build/release/ATE-Agent-Setup-<version>-win-<arch>.exe`. It uses Next.js standalone output and downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
+The command creates `build/release/Wireless-ATE-Agent-Setup-<version>-win-<arch>.exe`. It uses Next.js standalone output, validates and copies `bundled-resources`, downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
 
-Install the Setup EXE in a test directory, start ATE Agent, verify local and LAN access, then run the generated uninstaller. The installer defaults to `0.0.0.0:30141`, allowing another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`.
+Install the Setup EXE in a test directory, start Wireless ATE Agent, verify all five scenes plus local and LAN access, then run the generated uninstaller. The installer defaults to `0.0.0.0:30141`, allowing another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`.
 
 Never expose the service directly to the internet because it has no application-level authentication.
 
@@ -151,7 +151,7 @@ gh release create v<version> \
   --verify-tag \
   --title "v<version>" \
   --notes-file release-notes.md \
-  "build/release/ATE-Agent-Setup-<version>-win-<arch>.exe"
+  "build/release/Wireless-ATE-Agent-Setup-<version>-win-<arch>.exe"
 ```
 
 If the release already exists and only the notes need updating:
@@ -182,7 +182,7 @@ Upload or replace the Windows installer on an existing release with:
 gh release upload v<version> \
   --repo agegr/pi-web \
   --clobber \
-  "build/release/ATE-Agent-Setup-<version>-win-<arch>.exe"
+  "build/release/Wireless-ATE-Agent-Setup-<version>-win-<arch>.exe"
 ```
 
 ## 8. Final Verification

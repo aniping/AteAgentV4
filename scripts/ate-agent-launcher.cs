@@ -13,9 +13,9 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("ATE Agent")]
-[assembly: AssemblyDescription("ATE Agent")]
-[assembly: AssemblyProduct("ATE Agent")]
+[assembly: AssemblyTitle("Wireless ATE Agent")]
+[assembly: AssemblyDescription("Wireless ATE Agent")]
+[assembly: AssemblyProduct("Wireless ATE Agent")]
 [assembly: AssemblyCompany("ATE")]
 
 internal static class AteAgentLauncher
@@ -55,7 +55,7 @@ internal static class AteAgentLauncher
             }
             catch (Exception error)
             {
-                MessageBox.Show(error.Message, "ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(error.Message, "Wireless ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }
         }
@@ -104,7 +104,7 @@ internal static class AteAgentLauncher
             _launcherPath = Path.Combine(_installRoot, @"support\launcher.cjs");
             if (!File.Exists(_nodePath) || !File.Exists(_launcherPath))
             {
-                throw new FileNotFoundException("ATE Agent runtime files are missing. Please reinstall ATE Agent.");
+                throw new FileNotFoundException("Wireless ATE Agent runtime files are missing. Please reinstall Wireless ATE Agent.");
             }
 
             LaunchAddress address = ResolveLaunchAddress(_args);
@@ -177,7 +177,7 @@ internal static class AteAgentLauncher
 
         private void ConfigureStatusForm(out Label statusLabel, out Label statusIndicator)
         {
-            Text = "ATE Agent";
+            Text = "Wireless ATE Agent";
             Icon = _icon;
             ClientSize = new Size(620, 382);
             StartPosition = FormStartPosition.CenterScreen;
@@ -214,10 +214,10 @@ internal static class AteAgentLauncher
             {
                 AutoSize = true,
                 BackColor = Color.Transparent,
-                Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold),
+                Font = new Font("Microsoft YaHei UI", 17F, FontStyle.Bold),
                 ForeColor = Color.White,
                 Location = new Point(28, 124),
-                Text = "ATE Agent",
+                Text = "Wireless\r\nATE Agent",
             };
             Label subtitle = new Label
             {
@@ -294,7 +294,7 @@ internal static class AteAgentLauncher
                 AutoSize = true,
                 ForeColor = Color.FromArgb(113, 113, 122),
                 Location = new Point(65, 96),
-                Text = "\u672c\u5730 Agent \u670d\u52a1\u7531 ATE Agent \u6301\u7eed\u5b88\u62a4",
+                Text = "\u672c\u5730 Agent \u670d\u52a1\u7531 Wireless ATE Agent \u6301\u7eed\u5b88\u62a4",
             };
             Panel endpointPanel = new Panel
             {
@@ -329,7 +329,7 @@ internal static class AteAgentLauncher
                 ForeColor = Color.White,
                 Location = new Point(32, 216),
                 Size = new Size(351, 50),
-                Text = "\u6253\u5f00 ATE Agent \u5de5\u4f5c\u53f0    \u2192",
+                Text = "\u6253\u5f00 Wireless ATE Agent \u5de5\u4f5c\u53f0    \u2192",
                 UseVisualStyleBackColor = false,
             };
             openButton.FlatAppearance.BorderSize = 0;
@@ -391,14 +391,14 @@ internal static class AteAgentLauncher
         private NotifyIcon CreateNotifyIcon(out ContextMenuStrip menu)
         {
             menu = new ContextMenuStrip();
-            ToolStripMenuItem openItem = new ToolStripMenuItem("\u6253\u5f00 ATE Agent \u7f51\u9875");
+            ToolStripMenuItem openItem = new ToolStripMenuItem("\u6253\u5f00 Wireless ATE Agent \u7f51\u9875");
             openItem.Font = new Font(openItem.Font, FontStyle.Bold);
             openItem.Click += delegate { OpenWebInterfaceWhenReady(); };
             ToolStripMenuItem showItem = new ToolStripMenuItem("\u663e\u793a\u8fd0\u884c\u72b6\u6001");
             showItem.Click += delegate { ShowStatusWindow(); };
             ToolStripMenuItem restartItem = new ToolStripMenuItem("\u91cd\u542f\u670d\u52a1");
             restartItem.Click += delegate { RestartServer(); };
-            ToolStripMenuItem exitItem = new ToolStripMenuItem("\u9000\u51fa ATE Agent");
+            ToolStripMenuItem exitItem = new ToolStripMenuItem("\u9000\u51fa Wireless ATE Agent");
             exitItem.Click += delegate { ExitApplication(); };
             menu.Items.Add(openItem);
             menu.Items.Add(showItem);
@@ -409,7 +409,7 @@ internal static class AteAgentLauncher
             NotifyIcon notifyIcon = new NotifyIcon
             {
                 Icon = _icon,
-                Text = "ATE Agent - \u6b63\u5728\u542f\u52a8",
+                Text = "Wireless ATE Agent - \u6b63\u5728\u542f\u52a8",
                 ContextMenuStrip = menu,
                 Visible = true,
             };
@@ -455,17 +455,17 @@ internal static class AteAgentLauncher
                     ref startup,
                     out process))
                 {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "ATE Agent could not start its server process.");
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Wireless ATE Agent could not start its server process.");
                 }
                 processCreated = true;
                 if (!AssignProcessToJobObject(job, process.hProcess))
                 {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "ATE Agent could not manage its server process.");
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Wireless ATE Agent could not manage its server process.");
                 }
                 assignedToJob = true;
                 if (ResumeThread(process.hThread) == uint.MaxValue)
                 {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "ATE Agent could not resume its server process.");
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Wireless ATE Agent could not resume its server process.");
                 }
 
                 CloseHandle(process.hThread);
@@ -474,7 +474,7 @@ internal static class AteAgentLauncher
                 _process = process;
                 _serverRunning = true;
                 _serverReady = false;
-                SetStatus("\u670d\u52a1\u6b63\u5728\u542f\u52a8\u2026", "ATE Agent - \u6b63\u5728\u542f\u52a8", Color.FromArgb(245, 158, 11));
+                SetStatus("\u670d\u52a1\u6b63\u5728\u542f\u52a8\u2026", "Wireless ATE Agent - \u6b63\u5728\u542f\u52a8", Color.FromArgb(245, 158, 11));
             }
             catch
             {
@@ -509,14 +509,14 @@ internal static class AteAgentLauncher
         {
             try
             {
-                SetStatus("\u670d\u52a1\u6b63\u5728\u91cd\u542f\u2026", "ATE Agent - \u6b63\u5728\u91cd\u542f", Color.FromArgb(245, 158, 11));
+                SetStatus("\u670d\u52a1\u6b63\u5728\u91cd\u542f\u2026", "Wireless ATE Agent - \u6b63\u5728\u91cd\u542f", Color.FromArgb(245, 158, 11));
                 StopServer();
                 StartServer();
             }
             catch (Exception error)
             {
-                SetStatus("\u670d\u52a1\u542f\u52a8\u5931\u8d25", "ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
-                MessageBox.Show(error.Message, "ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("\u670d\u52a1\u542f\u52a8\u5931\u8d25", "Wireless ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
+                MessageBox.Show(error.Message, "Wireless ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -533,7 +533,7 @@ internal static class AteAgentLauncher
             CleanupServerHandles();
             if (!_exiting)
             {
-                SetStatus("\u670d\u52a1\u5df2\u505c\u6b62", "ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
+                SetStatus("\u670d\u52a1\u5df2\u505c\u6b62", "Wireless ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
             }
         }
 
@@ -570,14 +570,14 @@ internal static class AteAgentLauncher
                 GetExitCodeProcess(_process.hProcess, out exitCode);
                 ExitCode = unchecked((int)exitCode);
                 CleanupServerHandles();
-                SetStatus("\u670d\u52a1\u5df2\u505c\u6b62", "ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
+                SetStatus("\u670d\u52a1\u5df2\u505c\u6b62", "Wireless ATE Agent - \u670d\u52a1\u5df2\u505c\u6b62", Color.FromArgb(220, 38, 38));
                 return;
             }
 
             if (!_serverReady && CanConnect())
             {
                 _serverReady = true;
-                SetStatus("\u670d\u52a1\u6b63\u5728\u8fd0\u884c", "ATE Agent - \u6b63\u5728\u8fd0\u884c", Color.FromArgb(22, 163, 74));
+                SetStatus("\u670d\u52a1\u6b63\u5728\u8fd0\u884c", "Wireless ATE Agent - \u6b63\u5728\u8fd0\u884c", Color.FromArgb(22, 163, 74));
             }
         }
 
@@ -655,7 +655,7 @@ internal static class AteAgentLauncher
                 {
                     if (!_disposed)
                     {
-                        MessageBox.Show(message, "ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(message, "Wireless ATE Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 });
             }
@@ -839,7 +839,7 @@ internal static class AteAgentLauncher
             IntPtr job = CreateJobObject(IntPtr.Zero, null);
             if (job == IntPtr.Zero)
             {
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "ATE Agent could not create its server process group.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Wireless ATE Agent could not create its server process group.");
             }
 
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
@@ -849,7 +849,7 @@ internal static class AteAgentLauncher
             {
                 int error = Marshal.GetLastWin32Error();
                 CloseHandle(job);
-                throw new Win32Exception(error, "ATE Agent could not configure its server process group.");
+                throw new Win32Exception(error, "Wireless ATE Agent could not configure its server process group.");
             }
             return job;
         }
