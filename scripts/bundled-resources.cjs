@@ -27,7 +27,7 @@ function resolveExistingResource(root, relativePath, kind) {
   return realCandidate;
 }
 
-function validateBundledResources(bundleRoot) {
+function validateBundledStructure(bundleRoot) {
   const root = path.resolve(bundleRoot);
   const manifestPath = path.join(root, "bundle.json");
   if (!fs.existsSync(manifestPath)) throw new Error(`Bundled resource manifest is missing: ${manifestPath}`);
@@ -65,11 +65,68 @@ function validateBundledResources(bundleRoot) {
   return manifest;
 }
 
-function copyBundledResources(bundleRoot, appRoot) {
-  validateBundledResources(bundleRoot);
+function formatDiagnostic(root, sceneId, diagnostic) {
+  const diagnosticPath = diagnostic.path
+    ? path.relative(root, diagnostic.path) || path.basename(diagnostic.path)
+    : "unknown path";
+  if (diagnostic.collision) {
+    const winner = path.relative(root, diagnostic.collision.winnerPath);
+    const loser = path.relative(root, diagnostic.collision.loserPath);
+    return `[${sceneId}] collision: name "${diagnostic.collision.name}" is used by ${winner} and ${loser}`;
+  }
+  return `[${sceneId}] ${diagnostic.type}: ${diagnosticPath}: ${diagnostic.message}`;
+}
+
+async function validateBundledSkills(bundleRoot, suppliedManifest) {
+  const root = path.resolve(bundleRoot);
+  const manifest = suppliedManifest ?? validateBundledStructure(root);
+  const realRoot = fs.realpathSync.native(root);
+  const { loadSkills } = await import("@earendil-works/pi-coding-agent");
+  const summaries = [];
+  const failures = [];
+
+  for (const scene of manifest.scenes) {
+    const skillPaths = scene.skillPaths.map((skillPath) => path.resolve(root, skillPath));
+    const realSkillRoots = skillPaths.map((skillPath) => fs.realpathSync.native(skillPath));
+    const result = loadSkills({
+      cwd: root,
+      agentDir: root,
+      skillPaths,
+      includeDefaults: false,
+    });
+
+    failures.push(...result.diagnostics.map((diagnostic) => formatDiagnostic(root, scene.id, diagnostic)));
+    for (const skill of result.skills) {
+      const realSkillPath = fs.realpathSync.native(skill.filePath);
+      if (!isWithin(realRoot, realSkillPath) || !realSkillRoots.some((skillRoot) => isWithin(skillRoot, realSkillPath))) {
+        failures.push(
+          `[${scene.id}] error: ${path.relative(root, skill.filePath)} resolves outside its declared Skill paths`,
+        );
+      }
+    }
+    summaries.push({
+      sceneId: scene.id,
+      skillNames: result.skills.map((skill) => skill.name).sort(),
+    });
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Bundled Skill validation failed:\n- ${failures.join("\n- ")}`);
+  }
+  return summaries;
+}
+
+async function validateBundledResources(bundleRoot) {
+  const manifest = validateBundledStructure(bundleRoot);
+  await validateBundledSkills(bundleRoot, manifest);
+  return manifest;
+}
+
+async function copyBundledResources(bundleRoot, appRoot) {
+  await validateBundledResources(bundleRoot);
   const destination = path.join(appRoot, "bundled-resources");
   fs.cpSync(bundleRoot, destination, { recursive: true, force: true });
-  validateBundledResources(destination);
+  await validateBundledResources(destination);
   return destination;
 }
 
@@ -77,4 +134,5 @@ module.exports = {
   REQUIRED_SCENE_IDS,
   copyBundledResources,
   validateBundledResources,
+  validateBundledSkills,
 };

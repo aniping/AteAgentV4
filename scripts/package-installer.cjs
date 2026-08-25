@@ -259,7 +259,7 @@ async function main() {
   copyContents(staticRoot, path.join(appRoot, ".next", "static"));
   const publicRoot = path.join(repoRoot, "public");
   if (fs.existsSync(publicRoot)) fs.cpSync(publicRoot, path.join(appRoot, "public"), { recursive: true });
-  copyBundledResources(path.join(repoRoot, "bundled-resources"), appRoot);
+  await copyBundledResources(path.join(repoRoot, "bundled-resources"), appRoot);
 
   removeRedundantNestedPackage(
     path.join(appRoot, "node_modules", "@mistralai", "mistralai"),

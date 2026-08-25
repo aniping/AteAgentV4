@@ -55,7 +55,7 @@ Run this after `npm run release` so the installer uses the newly bumped package 
 npm run package
 ```
 
-The command creates `build/release/Wireless-ATE-Agent-Setup-<version>-win-<arch>.exe`. It uses Next.js standalone output, validates and copies `bundled-resources`, downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. It does not bump the version or publish anything.
+The command creates `build/release/Wireless-ATE-Agent-Setup-<version>-win-<arch>.exe`. It uses Next.js standalone output, validates and copies `bundled-resources`, downloads the matching official Node.js Windows distribution, verifies it against the release `SHASUMS256.txt`, and embeds Node.js with npm/npx and its license. Bundled Skills are loaded through the packaged Pi runtime before and after copying; any diagnostic, same-scene name collision, or path escape stops packaging. Empty reserved Skill directories remain valid. The command does not bump the version or publish anything.
 
 Install the Setup EXE in a test directory, start Wireless ATE Agent, verify all five scenes plus local and LAN access, then run the generated uninstaller. The installer defaults to `0.0.0.0:30141`, allowing another computer on the same trusted LAN to open `http://<host-LAN-IP>:30141`.
 
