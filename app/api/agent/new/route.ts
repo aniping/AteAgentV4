@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { allowFileRoot } from "@/lib/file-access";
 import { invalidateSessionListCache } from "@/lib/session-reader";
 import { startRpcSession } from "@/lib/rpc-manager";
+import { DEFAULT_SCENE_ID, isSceneId } from "@/lib/scenes";
 
 const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
@@ -45,18 +46,22 @@ export async function POST(req: Request) {
     }
 
     // Use a one-time key so startRpcSession's lock doesn't conflict with real session ids
-    const { provider, modelId, toolNames, thinkingLevel, promptLocale, ...promptCommand } = command as {
+    const { provider, modelId, toolNames, thinkingLevel, promptLocale, sceneId, ...promptCommand } = command as {
       provider?: string;
       modelId?: string;
       toolNames?: string[];
       thinkingLevel?: unknown;
       promptLocale?: unknown;
+      sceneId?: unknown;
       [key: string]: unknown;
     };
     if ((provider && !modelId) || (!provider && modelId)) {
       throw new Error("provider and modelId must be provided together");
     }
     const explicitThinkingLevel = parseThinkingLevel(thinkingLevel);
+    if (sceneId !== undefined && !isSceneId(sceneId)) {
+      return NextResponse.json({ error: `Invalid scene: ${String(sceneId)}` }, { status: 400 });
+    }
 
     // Must be unique per request: startRpcSession coalesces concurrent callers
     // that share a key onto one session. Date.now() (ms resolution) collides for
@@ -67,6 +72,7 @@ export async function POST(req: Request) {
       ...(provider && modelId ? { initialModel: { provider, modelId } } : {}),
       ...(explicitThinkingLevel ? { thinkingLevel: explicitThinkingLevel } : {}),
       ...(promptLocale !== undefined ? { promptLocale } : {}),
+      sceneId: sceneId ?? DEFAULT_SCENE_ID,
     });
 
     // Keep the files-route allowed-roots cache (see app/api/files/[...path]/route.ts)

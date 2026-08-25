@@ -318,6 +318,9 @@ export interface SessionInfo {
   /** True while the runtime session exists only in memory and its JSONL file
    *  has not been created yet. Disk-backed actions must wait until this clears. */
   transient?: boolean;
+  /** Wireless ATE work scene bound when the session was first created.
+   *  Missing on legacy sessions created before scene support. */
+  sceneId?: import("./scenes").SceneId;
 }
 
 export interface SessionContext {
