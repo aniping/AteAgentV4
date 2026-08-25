@@ -1,4 +1,5 @@
 import type { ResourceDiagnostic } from "@earendil-works/pi-coding-agent";
+import type { SceneId } from "./scenes";
 
 export interface SkillSearchResult {
   package: string;
@@ -54,6 +55,8 @@ export interface SkillInfo {
   };
   install?: SkillInstallInfo;
   archiveInstall?: SkillArchiveInstallInfo;
+  builtInSceneId?: SceneId;
+  readOnly?: boolean;
 }
 
 export interface SkillsResponse {

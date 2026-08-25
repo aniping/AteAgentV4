@@ -3,13 +3,25 @@ import type { SkillInfo, SkillsResponse } from "@/lib/api-types";
 import { listSkillArchiveInstallations } from "@/lib/skill-archive-install";
 import { annotateSkillsWithInstallInfo } from "@/lib/skill-lock";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "@/lib/project-trust";
+import { getSceneResourceConfig, isBundledSceneSkillPath } from "@/lib/scene-resources";
+import type { SceneId } from "@/lib/scenes";
 
-export async function loadSkillsWithInstallInfo(cwd: string): Promise<SkillsResponse> {
+export async function loadSkillsWithInstallInfo(cwd: string, sceneId?: SceneId): Promise<SkillsResponse> {
   const agentDir = getAgentDir();
-  const loader = new DefaultResourceLoader({ cwd, agentDir });
+  const sceneResources = sceneId ? getSceneResourceConfig(sceneId) : undefined;
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    additionalSkillPaths: sceneResources?.skillPaths,
+  });
   await loader.reload(projectTrustReloadOptions(cwd, agentDir));
   const { skills, diagnostics } = loader.getSkills();
-  const packageAnnotated = annotateSkillsWithInstallInfo(skills as SkillInfo[], { cwd, agentDir });
+  const sceneAnnotated = (skills as SkillInfo[]).map((skill) => (
+    sceneId && sceneResources && isBundledSceneSkillPath(skill.filePath, sceneResources.skillPaths)
+      ? { ...skill, builtInSceneId: sceneId, readOnly: true }
+      : skill
+  ));
+  const packageAnnotated = annotateSkillsWithInstallInfo(sceneAnnotated, { cwd, agentDir });
   const archiveInstallations = await listSkillArchiveInstallations({ cwd, agentDir });
   const archiveByScopeAndName = new Map(
     archiveInstallations.map((installation) => [

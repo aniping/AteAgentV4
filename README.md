@@ -17,6 +17,7 @@ Wireless ATE Agent 是面向无线装备研发与调试场景的本地智能助�
 - 切换场景会打开目标场景的新会话输入页，不会静默修改已经存在的会话。
 - 历史会话按项目和场景双重筛选；升级前创建的会话显示在“未分类历史”，不会根据标题或内容猜测归类。
 - 用户全局/项目 Skill 仍按 Pi 原有规则加载；安装包内置 Skill 则由当前场景的资源清单追加。
+- “技能”面板会显示当前场景的内置 Skill 并标记为只读；用户手动安装的 Skill 仍可按原方式管理。
 
 内置资源入口为 `bundled-resources/bundle.json`，五个场景的 `AGENTS.md` 和 Skill 预留目录位于 `bundled-resources/scenes/<scene>/`。后续把自研 Skill 目录（包含 `SKILL.md`）放入相应的 `skills/`，运行 `npm run package` 即会校验并复制到安装包的 `app/bundled-resources`。需要跨场景复用时，将 Skill 保留一份，并在多个场景的 `skillPaths` 中引用同一路径。
 

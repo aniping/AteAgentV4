@@ -5,23 +5,31 @@ import path from "path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { loadSkillsWithInstallInfo } from "@/lib/skills-service";
 import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-access";
+import { getBundledResourcesRoot } from "@/lib/scene-resources";
+import { isExistingPathWithinRoots } from "@/lib/path-security";
+import { isSceneId } from "@/lib/scenes";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/skills?cwd=<path>
+// GET /api/skills?cwd=<path>&sceneId=<scene>
 // Uses DefaultResourceLoader (same logic as AgentSession startup) so settings.json
-// skill paths, package skills, and .agents/skills directories are all included.
+// skill paths, package skills, .agents/skills, and the selected scene's bundled
+// Skill paths are all included.
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const cwd = searchParams.get("cwd");
+  const sceneId = searchParams.get("sceneId");
   if (!cwd) return NextResponse.json({ error: "cwd required" }, { status: 400 });
+  if (sceneId !== null && !isSceneId(sceneId)) {
+    return NextResponse.json({ error: `Invalid scene: ${sceneId}` }, { status: 400 });
+  }
 
   try {
     const allowedRoots = await getAllowedFileRoots();
     if (!isExistingFilePathAllowed(cwd, allowedRoots)) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
-    return NextResponse.json(await loadSkillsWithInstallInfo(cwd));
+    return NextResponse.json(await loadSkillsWithInstallInfo(cwd, sceneId ?? undefined));
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -34,6 +42,9 @@ export async function PATCH(req: Request) {
     const { filePath, disableModelInvocation } = body;
     if (!filePath) return NextResponse.json({ error: "filePath required" }, { status: 400 });
     if (!existsSync(filePath)) return NextResponse.json({ error: "file not found" }, { status: 404 });
+    if (isExistingPathWithinRoots(filePath, new Set([getBundledResourcesRoot()]))) {
+      return NextResponse.json({ error: "Bundled scene Skills are read-only" }, { status: 403 });
+    }
     const allowedRoots = new Set(await getAllowedFileRoots());
     allowedRoots.add(getAgentDir());
     // Globally installed skills live in ~/.agents/skills and are symlinked into
