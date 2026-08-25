@@ -43,7 +43,7 @@ test("portable startup exposes the bundled npm tools to child processes", async 
   assert.doesNotMatch(startScript, /runtime\\node\\node\.exe/);
 });
 
-test("Windows package builds an ATE Agent NSIS installer", async () => {
+test("Windows package builds a Wireless ATE Agent NSIS installer with compatible internal identity", async () => {
   const [packageJson, packageCommand, packageScript, installerScript, launcherSource, stopSource] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("./package-installer.cmd", import.meta.url), "utf8"),
@@ -55,7 +55,8 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
 
   assert.equal(JSON.parse(packageJson).scripts.package, "scripts\\package-installer.cmd");
   assert.match(packageCommand, /node\.exe?"? "%~dp0package-installer\.cjs"/i);
-  assert.match(packageScript, /ATE-Agent-Setup-/);
+  assert.match(packageScript, /Wireless-ATE-Agent-Setup-/);
+  assert.match(packageScript, /copyBundledResources/);
   assert.match(packageScript, /removeRedundantNestedPackage/);
   assert.match(packageScript, /pruneInstallerPayload/);
   assert.match(packageScript, /makensis/i);
@@ -90,8 +91,12 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
   assert.match(launcherSource, /RestartServer/);
   assert.match(launcherSource, /ShowStatusWindow/);
   assert.match(launcherSource, /SetCurrentProcessExplicitAppUserModelID/);
-  assert.match(launcherSource, /AssemblyTitle\("ATE Agent"\)/);
-  assert.match(launcherSource, /AssemblyProduct\("ATE Agent"\)/);
+  assert.match(launcherSource, /AssemblyTitle\("Wireless ATE Agent"\)/);
+  assert.match(launcherSource, /AssemblyProduct\("Wireless ATE Agent"\)/);
+  assert.match(installerScript, /DisplayName" "Wireless ATE Agent"/);
+  assert.match(installerScript, /Software\\ATE Agent/);
+  assert.match(installerScript, /Wireless ATE Agent\.lnk/);
+  assert.match(installerScript, /Delete "\$DESKTOP\\ATE Agent\.lnk"/);
   assert.doesNotMatch(launcherSource, /WaitForSingleObject\(process\.hProcess, INFINITE\)/);
   assert.match(stopSource, /ATE-Agent\.exe/);
   assert.match(stopSource, /runtime[\\]node[\\]node\.exe/);
@@ -109,7 +114,7 @@ test("Windows package builds an ATE Agent NSIS installer", async () => {
   );
 });
 
-test("ATE Agent starts with its status window and hides to the tray when closed", async () => {
+test("Wireless ATE Agent starts with its status window and hides to the tray when closed", async () => {
   const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
 
   assert.match(launcherSource, /LauncherForm\s*:\s*Form/);
@@ -127,7 +132,7 @@ test("ATE Agent starts with its status window and hides to the tray when closed"
   assert.doesNotMatch(launcherSource, /OnOpenWebSignal/);
 });
 
-test("ATE Agent binds a ContextMenuStrip to its tray icon", async () => {
+test("Wireless ATE Agent binds a ContextMenuStrip to its tray icon", async () => {
   const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
 
   assert.match(launcherSource, /new ContextMenuStrip\(\)/);
@@ -137,7 +142,7 @@ test("ATE Agent binds a ContextMenuStrip to its tray icon", async () => {
   assert.doesNotMatch(launcherSource, /new ContextMenu\(\)/);
 });
 
-test("ATE Agent status window shows separate Agent and UI versions", async () => {
+test("Wireless ATE Agent status window shows separate Agent and UI versions", async () => {
   const [launcherSource, packageScript] = await Promise.all([
     readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8"),
     readFile(new URL("./package-installer.cjs", import.meta.url), "utf8"),
@@ -152,7 +157,7 @@ test("ATE Agent status window shows separate Agent and UI versions", async () =>
   assert.match(launcherSource, /GetManifestResourceStream\("ATE\.Agent\.Brand\.png"\)/);
 });
 
-test("ATE Agent opens the browser without blocking its UI thread", async () => {
+test("Wireless ATE Agent opens the browser without blocking its UI thread", async () => {
   const launcherSource = await readFile(new URL("./ate-agent-launcher.cs", import.meta.url), "utf8");
 
   assert.match(launcherSource, /LinkClicked[\s\S]*?OpenWebInterfaceWhenReady\(\)/);

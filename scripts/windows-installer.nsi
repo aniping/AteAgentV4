@@ -26,7 +26,7 @@ ManifestDPIAware true
 !ifndef MAX_INSTALL_DIR_LENGTH
   !error "MAX_INSTALL_DIR_LENGTH is required"
 !endif
-Name "ATE Agent"
+Name "Wireless ATE Agent"
 OutFile "${OUTPUT_FILE}"
 Icon "${APP_ICON}"
 InstallDir "$PROGRAMFILES64\ATEAgent"
@@ -37,13 +37,13 @@ SetDatablockOptimize on
 SetOverwrite on
 ShowInstDetails show
 ShowUninstDetails show
-BrandingText "ATE Agent ${APP_VERSION} (${APP_ARCH})"
+BrandingText "Wireless ATE Agent ${APP_VERSION} (${APP_ARCH})"
 VIProductVersion "${APP_FILE_VERSION}"
-VIAddVersionKey /LANG=1033 "ProductName" "ATE Agent"
-VIAddVersionKey /LANG=1033 "FileDescription" "ATE Agent Windows Installer"
+VIAddVersionKey /LANG=1033 "ProductName" "Wireless ATE Agent"
+VIAddVersionKey /LANG=1033 "FileDescription" "Wireless ATE Agent Windows Installer"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "ProductVersion" "${APP_VERSION}"
-VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright 2026 ATE Agent"
+VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright 2026 Wireless ATE Agent"
 
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\ATE-Agent.exe"
@@ -82,7 +82,7 @@ Function StopATEAgent
   done:
 FunctionEnd
 
-Section "ATE Agent" SecMain
+Section "Wireless ATE Agent" SecMain
   SectionIn RO
   Call StopATEAgent
   SetShellVarContext all
@@ -101,9 +101,9 @@ Section "ATE Agent" SecMain
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\ATE Agent" "InstallDir" "$INSTDIR"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayName" "ATE Agent"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayName" "Wireless ATE Agent"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayVersion" "${APP_VERSION}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "Publisher" "ATE Agent"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "Publisher" "ATE"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "DisplayIcon" "$INSTDIR\ATE-Agent.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "UninstallString" '"$INSTDIR\Uninstall.exe"'
@@ -111,10 +111,14 @@ Section "ATE Agent" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ATE Agent" "NoRepair" 1
 
-  CreateDirectory "$SMPROGRAMS\ATE Agent"
-  CreateShortcut "$SMPROGRAMS\ATE Agent\ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "ATE Agent"
-  CreateShortcut "$SMPROGRAMS\ATE Agent\Uninstall ATE Agent.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$DESKTOP\ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "ATE Agent"
+  Delete "$DESKTOP\ATE Agent.lnk"
+  Delete "$SMPROGRAMS\ATE Agent\ATE Agent.lnk"
+  Delete "$SMPROGRAMS\ATE Agent\Uninstall ATE Agent.lnk"
+  RMDir "$SMPROGRAMS\ATE Agent"
+  CreateDirectory "$SMPROGRAMS\Wireless ATE Agent"
+  CreateShortcut "$SMPROGRAMS\Wireless ATE Agent\Wireless ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "Wireless ATE Agent"
+  CreateShortcut "$SMPROGRAMS\Wireless ATE Agent\Uninstall Wireless ATE Agent.lnk" "$INSTDIR\Uninstall.exe"
+  CreateShortcut "$DESKTOP\Wireless ATE Agent.lnk" "$INSTDIR\ATE-Agent.exe" "" "$INSTDIR\ATE-Agent.exe" 0 SW_SHOWNORMAL "" "Wireless ATE Agent"
 SectionEnd
 
 Section "Uninstall"
@@ -122,6 +126,10 @@ Section "Uninstall"
   SetShellVarContext all
   SetRegView 64
 
+  Delete "$DESKTOP\Wireless ATE Agent.lnk"
+  Delete "$SMPROGRAMS\Wireless ATE Agent\Wireless ATE Agent.lnk"
+  Delete "$SMPROGRAMS\Wireless ATE Agent\Uninstall Wireless ATE Agent.lnk"
+  RMDir "$SMPROGRAMS\Wireless ATE Agent"
   Delete "$DESKTOP\ATE Agent.lnk"
   Delete "$SMPROGRAMS\ATE Agent\ATE Agent.lnk"
   Delete "$SMPROGRAMS\ATE Agent\Uninstall ATE Agent.lnk"
