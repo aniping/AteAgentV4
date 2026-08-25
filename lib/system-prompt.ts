@@ -9,18 +9,18 @@ export interface PromptLocaleState {
 
 const SDK_HEADER = "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.";
 const SDK_DOCS_END = "- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)";
-const EN_HEADER = "You are a general-purpose AI assistant operating inside ATE Agent, an equipment agent platform. You help users by analyzing problems, using tools, reading and editing files, and completing tasks.";
-const ZH_HEADER = "你是运行在 ATE Agent（装备智能体平台）中的通用智能助手。你通过分析问题、使用工具、读取和编辑文件以及执行任务来帮助用户。";
-const EN_DOCS_END = "- Always read ATE Agent .md files completely and follow links to related docs (e.g., tui.md for TUI API details)";
-const ZH_DOCS_END = "- 始终完整阅读 ATE Agent 的 .md 文件，并继续查看其中链接的相关文档（例如阅读 tui.md 获取 TUI API 详情）";
+const EN_HEADER = "You are a general-purpose AI assistant operating inside Wireless ATE Agent, an equipment agent platform. You help users by analyzing problems, using tools, reading and editing files, and completing tasks.";
+const ZH_HEADER = "你是运行在 Wireless ATE Agent（无线装备智能体平台）中的通用智能助手。你通过分析问题、使用工具、读取和编辑文件以及执行任务来帮助用户。";
+const EN_DOCS_END = "- Always read Wireless ATE Agent .md files completely and follow links to related docs (e.g., tui.md for TUI API details)";
+const ZH_DOCS_END = "- 始终完整阅读 Wireless ATE Agent 的 .md 文件，并继续查看其中链接的相关文档（例如阅读 tui.md 获取 TUI API 详情）";
 
 const EN_BRAND_REPLACEMENTS: ReadonlyArray<readonly [string, string]> = [
   [SDK_HEADER, EN_HEADER],
-  ["Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):", "ATE Agent documentation (read only when the user asks about ATE Agent itself, its SDK, extensions, themes, skills, or TUI):"],
-  ["- When reading pi docs or examples,", "- When reading ATE Agent docs or examples,"],
-  ["pi packages (docs/packages.md)", "ATE Agent packages (docs/packages.md)"],
-  ["- When working on pi topics,", "- When working on ATE Agent topics,"],
-  ["- Always read pi .md files completely", "- Always read ATE Agent .md files completely"],
+  ["Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):", "Wireless ATE Agent documentation (read only when the user asks about Wireless ATE Agent itself, its SDK, extensions, themes, skills, or TUI):"],
+  ["- When reading pi docs or examples,", "- When reading Wireless ATE Agent docs or examples,"],
+  ["pi packages (docs/packages.md)", "Wireless ATE Agent packages (docs/packages.md)"],
+  ["- When working on pi topics,", "- When working on Wireless ATE Agent topics,"],
+  ["- Always read pi .md files completely", "- Always read Wireless ATE Agent .md files completely"],
 ];
 
 const ZH_OWNED_REPLACEMENTS: ReadonlyArray<readonly [string, string]> = [
@@ -45,15 +45,15 @@ const ZH_OWNED_REPLACEMENTS: ReadonlyArray<readonly [string, string]> = [
   ["- Use write only for new files or complete rewrites.", "- 仅在创建新文件或完整重写文件时使用 write。"],
   ["- Be concise in your responses", "- 回复应简洁"],
   ["- Show file paths clearly when working with files", "- 处理文件时应清楚标明文件路径"],
-  ["Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):", "ATE Agent 文档（仅当用户询问 ATE Agent 本身、SDK、扩展、主题、技能或 TUI 时读取）："],
+  ["Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):", "Wireless ATE Agent 文档（仅当用户询问 Wireless ATE Agent 本身、SDK、扩展、主题、技能或 TUI 时读取）："],
   ["- Main documentation: ", "- 主文档："],
   ["- Additional docs: ", "- 补充文档："],
   ["- Examples: ", "- 示例："],
   [" (extensions, custom tools, SDK)", "（扩展、自定义工具、SDK）"],
-  ["- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory", "- 阅读 ATE Agent 文档或示例时，应分别在“补充文档”和“示例”目录下解析 docs/... 与 examples/...，不要相对于当前工作目录解析"],
-  ["- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)", "- 相关主题对应文档：扩展（docs/extensions.md、examples/extensions/）、主题（docs/themes.md）、技能（docs/skills.md）、提示词模板（docs/prompt-templates.md）、TUI 组件（docs/tui.md）、快捷键（docs/keybindings.md）、SDK 集成（docs/sdk.md）、自定义提供商（docs/custom-provider.md）、添加模型（docs/models.md）、ATE Agent 包（docs/packages.md）、环境变量（docs/environment-variables.md）"],
-  ["- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing", "- 处理 ATE Agent 相关任务时，先阅读文档和示例，并在实现前继续阅读 .md 中交叉引用的相关资料"],
-  ["- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)", "- 始终完整阅读 ATE Agent 的 .md 文件，并继续查看其中链接的相关文档（例如阅读 tui.md 获取 TUI API 详情）"],
+  ["- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory", "- 阅读 Wireless ATE Agent 文档或示例时，应分别在“补充文档”和“示例”目录下解析 docs/... 与 examples/...，不要相对于当前工作目录解析"],
+  ["- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)", "- 相关主题对应文档：扩展（docs/extensions.md、examples/extensions/）、主题（docs/themes.md）、技能（docs/skills.md）、提示词模板（docs/prompt-templates.md）、TUI 组件（docs/tui.md）、快捷键（docs/keybindings.md）、SDK 集成（docs/sdk.md）、自定义提供商（docs/custom-provider.md）、添加模型（docs/models.md）、Wireless ATE Agent 包（docs/packages.md）、环境变量（docs/environment-variables.md）"],
+  ["- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing", "- 处理 Wireless ATE Agent 相关任务时，先阅读文档和示例，并在实现前继续阅读 .md 中交叉引用的相关资料"],
+  ["- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)", "- 始终完整阅读 Wireless ATE Agent 的 .md 文件，并继续查看其中链接的相关文档（例如阅读 tui.md 获取 TUI API 详情）"],
 ];
 
 const PROJECT_CONTEXT_SOURCE = "Project-specific instructions and guidelines:";

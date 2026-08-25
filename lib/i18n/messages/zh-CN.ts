@@ -444,7 +444,7 @@ export const zhCNLocale: LocalePlugin = {
     "i18n.skillZipOnly": "请选择 .zip 文件。",
     "i18n.skillZipSingle": "每次请选择一个 ZIP 文件。",
     "i18n.skillZipHint": "普通技能包必须只包含一个 SKILL.md；集成包还可声明经过校验和验证的运行时文件。",
-    "i18n.skillZipTrustWarning": "请只安装可信的 ZIP。包内运行时程序可能在安装后由 ATE Agent 执行。",
+    "i18n.skillZipTrustWarning": "请只安装可信的 ZIP。包内运行时程序可能在安装后由 Wireless ATE Agent 执行。",
     "i18n.skillZipInstalled": "技能 {name} 已安装。",
     "i18n.skillIntegrationInstalled": "技能 {name} 及其集成运行时已安装。",
     "i18n.uninstallArchive": "卸载",

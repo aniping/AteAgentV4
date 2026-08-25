@@ -16,7 +16,7 @@ export function PwaRegistration() {
         scope: "/",
         updateViaCache: "none",
       }).catch((error: unknown) => {
-        console.error("Failed to register the ATE Agent service worker:", error);
+        console.error("Failed to register the Wireless ATE Agent service worker:", error);
       });
     };
 

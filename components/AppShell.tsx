@@ -45,6 +45,13 @@ import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
+import {
+  DEFAULT_SCENE_ID,
+  getSceneDefinition,
+  getSceneLabel,
+  isSceneId,
+  type SceneId,
+} from "@/lib/scenes";
 
 type SessionCopyField = "file" | "id";
 type AutoNameStatus =
@@ -61,6 +68,7 @@ const DEFAULT_RIGHT_PANEL_WIDTH_RATIO = 0.42;
 const RIGHT_PANEL_MAX_WIDTH_RATIO = 2 / 3;
 const SIDEBAR_WIDTH_STORAGE_KEY = "pi-sidebar-width";
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = "pi-right-panel-width";
+const ACTIVE_SCENE_STORAGE_KEY = "wireless-ate:active-scene";
 const SIDEBAR_RESIZE_CONFIG: PanelResizeConfig = {
   minWidth: 200,
   maxWidth: 480,
@@ -79,6 +87,10 @@ type ActivePanelResize = {
   currentWidth: number;
   maxWidth: number;
 };
+
+function buildNewSessionDraftKey(sceneId: SceneId, draftId: string, cwd: string): string {
+  return `new:${sceneId}:${draftId}:${cwd}`;
+}
 
 function PanelResizeHandle({
   side,
@@ -121,6 +133,9 @@ export function AppShell() {
     if (soundEnabledRef.current) playDoneSound();
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+  const [activeSceneId, setActiveSceneId] = useState<SceneId>(DEFAULT_SCENE_ID);
+  const activeSceneIdRef = useRef(activeSceneId);
+  activeSceneIdRef.current = activeSceneId;
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -157,6 +172,19 @@ export function AppShell() {
   }, [isMobile]);
   useEffect(() => {
     setMobileSidebarReady(true);
+  }, []);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ACTIVE_SCENE_STORAGE_KEY);
+      if (isSceneId(stored) && stored !== activeSceneId) {
+        setActiveSceneId(stored);
+        setSessionKey((key) => key + 1);
+      }
+    } catch {
+      // Storage can be unavailable in privacy mode; requirements remains the default.
+    }
+    // Read the preference once after hydration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
@@ -596,7 +624,7 @@ export function AppShell() {
         suppressCwdBumpRef.current = true;
         const draftId = `initial:${requestedCwd}`;
         setNewSessionDraftId(draftId);
-        activeNewSessionDraftKeyRef.current = `new:${draftId}:${data.cwd}`;
+        activeNewSessionDraftKeyRef.current = buildNewSessionDraftKey(activeSceneIdRef.current, draftId, data.cwd);
         setNewSessionCwd(data.cwd);
         setInitialCwdStatus("ready");
       })
@@ -639,6 +667,7 @@ export function AppShell() {
         // the null-session welcome mount from the switch would never load
         // the restored session's messages.
         setSelectedSession(s);
+        if (s.sceneId) setActiveSceneId(s.sceneId);
         setSessionKey((k) => k + 1);
         if (new URLSearchParams(window.location.search).get("session") !== s.id) {
           router.replace(`?session=${encodeURIComponent(s.id)}`, { scroll: false });
@@ -688,7 +717,7 @@ export function AppShell() {
       ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setNewSessionDraftId(draftId);
-    activeNewSessionDraftKeyRef.current = `new:${draftId}:${cwd}`;
+    activeNewSessionDraftKeyRef.current = buildNewSessionDraftKey(activeSceneId, draftId, cwd);
     setSelectedSession(null);
     setNewSessionCwd((prev) => {
       if (prev && prev !== cwd) return null;
@@ -711,7 +740,7 @@ export function AppShell() {
       restoreWorkspaceContext(newProject);
     }
     router.replace("/", { scroll: false });
-  }, [activeCwd, invalidateWorkspaceRestore, newSessionCwd, router, selectedSession, restoreWorkspaceContext]);
+  }, [activeCwd, activeSceneId, invalidateWorkspaceRestore, newSessionCwd, router, selectedSession, restoreWorkspaceContext]);
 
   const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
     invalidateWorkspaceRestore();
@@ -730,6 +759,10 @@ export function AppShell() {
     }
     setNewSessionCwd(null);
     setSelectedSession(session);
+    if (session.sceneId) {
+      setActiveSceneId(session.sceneId);
+      try { window.localStorage.setItem(ACTIVE_SCENE_STORAGE_KEY, session.sceneId); } catch { /* ignore */ }
+    }
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
     setSystemPromptLoading(false);
@@ -750,7 +783,7 @@ export function AppShell() {
 
   const handleNewSession = useCallback((sessionId: string, cwd: string) => {
     invalidateWorkspaceRestore();
-    const draftKey = `new:${sessionId}:${cwd}`;
+    const draftKey = buildNewSessionDraftKey(activeSceneId, sessionId, cwd);
     activeNewSessionDraftKeyRef.current = draftKey;
     setNewSessionDraftId(sessionId);
     setSelectedSession(null);
@@ -763,7 +796,30 @@ export function AppShell() {
     setActiveTopPanel(null);
     if (isMobile) setSidebarOpen(false);
     router.replace("/", { scroll: false });
-  }, [invalidateWorkspaceRestore, router, isMobile]);
+  }, [activeSceneId, invalidateWorkspaceRestore, router, isMobile]);
+
+  const handleSceneChange = useCallback((sceneId: SceneId) => {
+    if (sceneId === activeSceneId && (!selectedSession || selectedSession.sceneId === sceneId)) return;
+    invalidateWorkspaceRestore();
+    const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd;
+    const draftId = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    setActiveSceneId(sceneId);
+    try { window.localStorage.setItem(ACTIVE_SCENE_STORAGE_KEY, sceneId); } catch { /* ignore */ }
+    setNewSessionDraftId(draftId);
+    activeNewSessionDraftKeyRef.current = cwd ? buildNewSessionDraftKey(sceneId, draftId, cwd) : null;
+    setSelectedSession(null);
+    setNewSessionCwd(cwd ?? null);
+    setSessionKey((key) => key + 1);
+    setBranchTree([]);
+    setBranchActiveLeafId(null);
+    setSystemPrompt(null);
+    setSystemPromptLoading(false);
+    setActiveTopPanel(null);
+    if (isMobile) setSidebarOpen(false);
+    router.replace("/", { scroll: false });
+  }, [activeCwd, activeSceneId, invalidateWorkspaceRestore, isMobile, newSessionCwd, router, selectedSession]);
 
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
@@ -932,7 +988,7 @@ export function AppShell() {
         ? crypto.randomUUID()
         : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       setNewSessionDraftId(draftId);
-      activeNewSessionDraftKeyRef.current = cwd ? `new:${draftId}:${cwd}` : null;
+      activeNewSessionDraftKeyRef.current = cwd ? buildNewSessionDraftKey(activeSceneId, draftId, cwd) : null;
       setSelectedSession(null);
       setNewSessionCwd(cwd ?? null);
       setSessionKey((k) => k + 1);
@@ -943,7 +999,7 @@ export function AppShell() {
       setActiveTopPanel(null);
       router.replace("/", { scroll: false });
     }
-  }, [invalidateWorkspaceRestore, selectedSession, router]);
+  }, [activeSceneId, invalidateWorkspaceRestore, selectedSession, router]);
 
   const handleOpenFile = useCallback((
     filePath: string,
@@ -995,7 +1051,7 @@ export function AppShell() {
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const effectiveNewSessionCwd = newSessionCwd ?? (selectedSession === null && activeCwd ? activeCwd : null);
   const newSessionDraftKey = selectedSession === null && effectiveNewSessionCwd
-    ? `new:${newSessionDraftId}:${effectiveNewSessionCwd}`
+    ? buildNewSessionDraftKey(activeSceneId, newSessionDraftId, effectiveNewSessionCwd)
     : null;
   useLayoutEffect(() => {
     activeNewSessionDraftKeyRef.current = newSessionDraftKey;
@@ -1052,7 +1108,13 @@ export function AppShell() {
 
   const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
-  const windowTitle = activeCwdName ? `${activeCwdName} - ATE Agent` : "ATE Agent";
+  const titleSceneId = selectedSession ? selectedSession.sceneId : activeSceneId;
+  const titleScene = titleSceneId ? getSceneDefinition(titleSceneId) : undefined;
+  const windowTitle = activeCwdName && titleScene
+    ? `${activeCwdName} - ${getSceneLabel(titleScene, locale)} - Wireless ATE Agent`
+    : activeCwdName
+      ? `${activeCwdName} - Wireless ATE Agent`
+    : "Wireless ATE Agent";
 
   useEffect(() => {
     const syncWindowTitle = () => {
@@ -1069,6 +1131,8 @@ export function AppShell() {
     <>
       <SessionSidebar
         selectedSessionId={selectedSession?.id ?? null}
+        activeSceneId={activeSceneId}
+        onSceneChange={handleSceneChange}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
         initialSessionId={initialSessionId}
@@ -2250,6 +2314,7 @@ export function AppShell() {
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}
               newSessionCwd={effectiveNewSessionCwd}
               newSessionDraftKey={newSessionDraftKey}
+              sceneId={selectedSession?.sceneId ?? (selectedSession ? undefined : activeSceneId)}
               onAgentEnd={handleAgentEnd}
               onAttentionNeeded={handleAttentionNeeded}
               onSessionCreated={handleSessionCreated}

@@ -50,11 +50,11 @@ if (!fs.existsSync(nextDir)) {
 if (!loopbackHostnames.has(hostname)) {
   if (passwordEnabled) {
     console.warn(
-      `Warning: ATE Agent is listening on ${hostname} with Basic Auth over HTTP. Use HTTPS or a trusted VPN to protect the password in transit.`,
+      `Warning: Wireless ATE Agent is listening on ${hostname} with Basic Auth over HTTP. Use HTTPS or a trusted VPN to protect the password in transit.`,
     );
   } else {
     console.warn(
-      `Warning: ATE Agent is listening on ${hostname} without authentication. Only use this on a trusted network.`,
+      `Warning: Wireless ATE Agent is listening on ${hostname} without authentication. Only use this on a trusted network.`,
     );
   }
 }

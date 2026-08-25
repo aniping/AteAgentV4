@@ -17,6 +17,12 @@ import { useDragDrop } from "@/hooks/useDragDrop";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import {
+  getSceneAgentName,
+  getSceneDefinition,
+  getSceneDescription,
+  type SceneId,
+} from "@/lib/scenes";
+import {
   captureScrollDistance,
   getNextVisibleCount,
   getPromptAnchorSpacerHeight,
@@ -30,6 +36,7 @@ interface Props {
   sessionRunning?: boolean;
   newSessionCwd: string | null;
   newSessionDraftKey: string | null;
+  sceneId?: SceneId;
   onAgentEnd?: () => void;
   onAttentionNeeded?: (request: BlockingExtensionUiRequest) => void;
   onSessionCreated?: (session: SessionInfo, sourceDraftKey: string) => void;
@@ -185,7 +192,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionDraftKey, sceneId, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { locale, t } = useI18n();
   const isMobile = useIsMobile();
 
@@ -228,7 +235,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
     handleBuiltinSlashCommand,
     handleToolPresetChange, handleThinkingLevelChange, loadSlashCommands, scrollUserMsgToTop,
   } = useAgentSession({
-    session, sessionRunning, newSessionCwd, newSessionDraftKey, onAgentEnd: wrappedOnAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
+    session, sessionRunning, newSessionCwd, newSessionDraftKey, sceneId, onAgentEnd: wrappedOnAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked,
     modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsPanelOpen, promptLocale: locale,
   });
   const sessionBusy = agentRunning || bashRunning;
@@ -357,6 +364,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
   }, [messages.length]);
 
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
+  const scene = sceneId ? getSceneDefinition(sceneId) : undefined;
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
   const messageContentRef = useRef<HTMLDivElement | null>(null);
@@ -617,7 +625,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
               <div className="ate-brand-hero--animated" style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1, overflow: "visible" }}>
                 <BrandMark size={38} />
                 <div style={{ minWidth: 0, overflow: "hidden" }}>
-                  <div className="ate-brand-title">ATE Agent</div>
+                  <div className="ate-brand-title">Wireless ATE Agent</div>
                   <div className="ate-brand-subtitle">{t("brand.subtitle")}</div>
                 </div>
               </div>
@@ -630,6 +638,18 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
                 </span>
               </div>
             </div>
+            {scene && (
+              <div
+                className="scene-launch-card"
+                style={{ "--scene-accent": scene.accent } as React.CSSProperties}
+              >
+                <span className="scene-launch-dot" aria-hidden="true" />
+                <div style={{ minWidth: 0 }}>
+                  <div className="scene-launch-agent">{getSceneAgentName(scene, locale)}</div>
+                  <div className="scene-launch-description">{getSceneDescription(scene, locale)}</div>
+                </div>
+              </div>
+            )}
             {chatInputElement}
             <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
           </div>

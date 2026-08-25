@@ -11,6 +11,11 @@ import { useI18n } from "@/hooks/useI18n";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { FileExplorer, type FileExplorerHandle } from "./FileExplorer";
 import { BrandMark } from "./BrandMark";
+import {
+  getSceneLabel,
+  SCENES,
+  type SceneId,
+} from "@/lib/scenes";
 
 declare global {
   interface Window {
@@ -81,6 +86,8 @@ function ToolbarIconButton({
 
 interface Props {
   selectedSessionId: string | null;
+  activeSceneId: SceneId;
+  onSceneChange: (sceneId: SceneId) => void;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onNewSession?: (sessionId: string, cwd: string) => void;
   initialSessionId?: string | null;
@@ -355,7 +362,7 @@ function BrandTitle() {
   const [scrambling, setScrambling] = useState(false);
   const revertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}a${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "ATE Agent";
+  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}a${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "Wireless ATE Agent";
   const display = useScramble(target, scrambling);
 
   const triggerScramble = useCallback((toVersion: boolean) => {
@@ -383,21 +390,23 @@ function BrandTitle() {
       style={{
         display: "flex", alignItems: "center", gap: 7,
         background: "none", border: "none", padding: 0, cursor: "pointer",
-        fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em",
+        fontWeight: 700, fontSize: 13, letterSpacing: "-0.02em",
         color: showVersion ? "var(--accent)" : "var(--text)",
         fontFamily: "var(--font-mono)",
-        minWidth: "6ch",
+        minWidth: 0,
+        flex: 1,
+        overflow: "hidden",
       }}
-      aria-label="ATE Agent"
+      aria-label="Wireless ATE Agent"
     >
-      <BrandMark size={22} />
-      <span>{display}</span>
+      <BrandMark size={20} />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{display}</span>
     </button>
   );
 }
 
-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange }: Props) {
-  const { t } = useI18n();
+export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange }: Props) {
+  const { locale, t } = useI18n();
   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -428,6 +437,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [explorerUploadBusy, setExplorerUploadBusy] = useState(false);
   const [changesCount, setChangesCount] = useState(0);
   const [changesCollapsed, setChangesCollapsed] = useState(true);
+  const [showUnclassified, setShowUnclassified] = useState(false);
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+    const selected = allSessions.find((session) => session.id === selectedSessionId);
+    if (selected) setShowUnclassified(!selected.sceneId);
+  }, [allSessions, selectedSessionId]);
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
@@ -885,6 +901,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   // open session after manually switching worktrees.
   const handleSelectSessionFromList = useCallback((s: SessionInfo) => {
     if (s.cwd) setSelectedCwd(s.cwd);
+    setShowUnclassified(!s.sceneId);
     onSelectSession(s);
   }, [onSelectSession]);
 
@@ -924,9 +941,13 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     [projectActivity, selectedProject],
   );
 
-  const filteredSessions = selectedProject
+  const projectSessions = selectedProject
     ? sessionsForProject(allSessions, selectedProject.key)
     : allSessions;
+  const unclassifiedCount = projectSessions.filter((session) => !session.sceneId).length;
+  const filteredSessions = projectSessions.filter((session) => (
+    showUnclassified ? !session.sceneId : session.sceneId === activeSceneId
+  ));
   const showWorktreeSwitcher = Boolean(
     worktreeState?.isGit
     && worktreeState.isTopLevel
@@ -993,8 +1014,8 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 color: selectedCwd ? "var(--text-muted)" : "var(--text-dim)",
                 cursor: selectedCwd ? "pointer" : "not-allowed",
                 height: 32,
-                paddingLeft: 10,
-                paddingRight: 12,
+                width: 32,
+                padding: 0,
                 borderRadius: 7,
                 fontSize: 12,
                 fontWeight: 500,
@@ -1019,7 +1040,6 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 <line x1="6" y1="1" x2="6" y2="11" />
                 <line x1="1" y1="6" x2="11" y2="6" />
               </svg>
-              {t("sidebar.new")}
             </button>
             <button
               onClick={() => loadSessions(false, true)}
@@ -1062,6 +1082,75 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             </button>
           </div>
         </div>
+        <div
+          role="navigation"
+          aria-label={locale === "zh-CN" ? "工作场景" : "Work scenes"}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 4,
+            marginBottom: unclassifiedCount > 0 ? 6 : 10,
+          }}
+        >
+          {SCENES.map((scene) => {
+            const active = scene.id === activeSceneId;
+            const count = projectSessions.filter((session) => session.sceneId === scene.id).length;
+            return (
+              <button
+                key={scene.id}
+                type="button"
+                aria-pressed={active}
+                title={`${getSceneLabel(scene, locale)} · ${count}`}
+                onClick={() => {
+                  setShowUnclassified(false);
+                  onSceneChange(scene.id);
+                }}
+                style={{
+                  position: "relative",
+                  minWidth: 0,
+                  height: 31,
+                  padding: "0 3px",
+                  overflow: "hidden",
+                  border: `1px solid ${active ? `color-mix(in srgb, ${scene.accent} 55%, var(--border))` : "var(--border)"}`,
+                  borderRadius: 8,
+                  background: active
+                    ? `linear-gradient(145deg, color-mix(in srgb, ${scene.accent} 18%, var(--bg-panel)), var(--bg-panel))`
+                    : "var(--bg-panel)",
+                  color: active ? scene.accent : "var(--text-muted)",
+                  boxShadow: active ? `0 6px 18px color-mix(in srgb, ${scene.accent} 13%, transparent)` : "none",
+                  cursor: "pointer",
+                  fontSize: locale === "zh-CN" ? 11 : 9,
+                  fontWeight: active ? 700 : 500,
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                }}
+              >
+                {getSceneLabel(scene, locale)}
+              </button>
+            );
+          })}
+        </div>
+        {unclassifiedCount > 0 && (
+          <button
+            type="button"
+            aria-pressed={showUnclassified}
+            onClick={() => setShowUnclassified(true)}
+            style={{
+              width: "100%",
+              height: 24,
+              marginBottom: 10,
+              border: "1px dashed var(--border)",
+              borderRadius: 7,
+              background: showUnclassified ? "var(--bg-selected)" : "transparent",
+              color: showUnclassified ? "var(--text)" : "var(--text-dim)",
+              cursor: "pointer",
+              fontSize: 10,
+            }}
+          >
+            {locale === "zh-CN" ? "未分类历史" : "Unclassified history"} · {unclassifiedCount}
+          </button>
+        )}
 
         {/* CWD picker */}
         <div ref={dropdownRef} style={{ position: "relative" }}>

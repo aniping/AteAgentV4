@@ -373,6 +373,52 @@ pre, code {
   white-space: nowrap;
 }
 
+.scene-launch-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 52px 12px 16px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--scene-accent) 34%, var(--border));
+  border-radius: 12px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--scene-accent) 12%, transparent), transparent 58%),
+    var(--bg-panel);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--scene-accent) 9%, transparent);
+}
+
+.scene-launch-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--scene-accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--scene-accent) 14%, transparent),
+    0 0 18px color-mix(in srgb, var(--scene-accent) 55%, transparent);
+}
+
+.scene-launch-agent {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scene-launch-description {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .scene-launch-card {
+    margin-right: 16px;
+  }
+}
+
 @keyframes ate-brand-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
