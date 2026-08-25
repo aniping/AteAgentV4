@@ -10,6 +10,7 @@ import type { AgentMessage, SessionEntry, SessionHeader, SessionInfo, SessionCon
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
 import { projectIdentityKey } from "./project-identity";
+import { getSceneIdFromEntries } from "./session-scene";
 import { sessionPathKey } from "./session-path";
 import { resolveProject, type ProjectInfo } from "./worktree";
 
@@ -63,9 +64,39 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath ? pathToId.get(sessionPathKey(s.parentSessionPath)) : undefined,
       transient: false,
+      sceneId: readSessionSceneId(s.path),
     };
   });
   return attachSessionProjectInfo(sessions);
+}
+
+const SCENE_BINDING_SCAN_BYTES = 64 * 1024;
+
+/** Read only the beginning of a session file. New scene bindings are written
+ * before the first prompt, so history grouping does not require a second full
+ * JSONL parse after SessionManager.listAll(). */
+export function readSessionSceneId(filePath: string): SessionInfo["sceneId"] {
+  let fd: number | undefined;
+  try {
+    fd = openSync(filePath, "r");
+    const buffer = Buffer.allocUnsafe(SCENE_BINDING_SCAN_BYTES);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    const entries: unknown[] = [];
+    for (const line of buffer.subarray(0, bytesRead).toString("utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        entries.push(JSON.parse(line));
+      } catch {
+        // The final line may be truncated by the bounded prefix read.
+      }
+    }
+    return getSceneIdFromEntries(entries);
+  } catch {
+    // A session can disappear between listAll() and this metadata read.
+    return undefined;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
 export async function listAllSessions(options: { force?: boolean } = {}): Promise<SessionInfo[]> {

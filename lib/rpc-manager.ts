@@ -19,6 +19,9 @@ import { isModelAllowedByConfig, type ModelsConfig } from "./models-config";
 import { readModelsConfig } from "./models-config-store";
 import { prepareBundledMcpAdapter } from "./mcp-adapter";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
+import { getSceneResourceConfig } from "./scene-resources";
+import { DEFAULT_SCENE_ID, type SceneId } from "./scenes";
+import { createSceneBindingData, getSceneIdFromEntries, SCENE_BINDING_CUSTOM_TYPE } from "./session-scene";
 import {
   createProjectCommandBashExtension,
   createProjectCommandBashOperations,
@@ -131,6 +134,7 @@ export interface RpcSessionStartOptions {
   initialModel?: { provider: string; modelId: string };
   thinkingLevel?: ThinkingLevel;
   promptLocale?: unknown;
+  sceneId?: SceneId;
 }
 
 const CODING_TOOL_NAMES = ["read", "bash", "edit", "write", "grep", "find", "ls"];
@@ -206,6 +210,7 @@ export class AgentSessionWrapper {
   constructor(
     public readonly inner: AgentSessionLike,
     private readonly promptLocaleState: PromptLocaleState,
+    public readonly sceneId?: SceneId,
   ) {
     this.sourceSystemPrompt = inner.agent.state?.systemPrompt ?? "";
     this.applySystemPromptLocale();
@@ -225,6 +230,13 @@ export class AgentSessionWrapper {
 
   get streamingMessage() {
     return this.inner.agent.state?.streamingMessage;
+  }
+
+  private ensureSceneBinding(): void {
+    if (!this.sceneId) return;
+    const manager = this.inner.sessionManager;
+    if (getSceneIdFromEntries(manager.getEntries())) return;
+    manager.appendCustomEntry(SCENE_BINDING_CUSTOM_TYPE, createSceneBindingData(this.sceneId));
   }
 
   get isStreaming(): boolean {
@@ -265,7 +277,7 @@ export class AgentSessionWrapper {
 
   beginExtensionBinding(options: ExtensionBindingOptions = {}): void {
     void this.ensureExtensionsBound(options).catch((err) => {
-      console.error("[ATE Agent] failed to dispatch session_start to extensions:", err instanceof Error ? err.message : err);
+      console.error("[Wireless ATE Agent] failed to dispatch session_start to extensions:", err instanceof Error ? err.message : err);
     });
   }
 
@@ -302,7 +314,7 @@ export class AgentSessionWrapper {
             id: randomUUID(),
             method: "notify",
             notifyType: "warning",
-            message: "Extension requested shutdown, but shutdown is not supported in ATE Agent.",
+            message: "Extension requested shutdown, but shutdown is not supported in Wireless ATE Agent.",
           } as ExtensionUiRequest as AgentEvent),
           onError: (error) => this.emit({
             type: "extension_error",
@@ -316,7 +328,7 @@ export class AgentSessionWrapper {
       }
       this.extensionsBound = true;
       this.captureSourceSystemPrompt();
-      console.log(`[ATE Agent] session_start dispatched to extensions for session ${this.inner.sessionId}`);
+      console.log(`[Wireless ATE Agent] session_start dispatched to extensions for session ${this.inner.sessionId}`);
     })().catch((err) => {
       this.extensionBindingError = err;
       throw err;
@@ -377,7 +389,7 @@ export class AgentSessionWrapper {
         listener(event);
       } catch (error) {
         console.error(
-          `[ATE Agent] failed to deliver ${event.type} event:`,
+          `[Wireless ATE Agent] failed to deliver ${event.type} event:`,
           error instanceof Error ? error.message : error,
         );
       }
@@ -402,7 +414,7 @@ export class AgentSessionWrapper {
         return;
       }
       void this.shutdown().catch((error) => {
-        console.error("[ATE Agent] failed to shut down idle session:", error instanceof Error ? error.message : error);
+        console.error("[Wireless ATE Agent] failed to shut down idle session:", error instanceof Error ? error.message : error);
       });
     }, 10 * 60 * 1000);
   }
@@ -467,6 +479,7 @@ export class AgentSessionWrapper {
           if (activeModel && !isModelAllowedByConfig(activeModel, readModelsConfig() as ModelsConfig)) {
             throw new Error(`Model is no longer configured: ${activeModel.provider}/${activeModel.id}`);
           }
+          this.ensureSceneBinding();
           const promptImages = command.images as Array<{ type: "image"; data: string; mimeType: string }> | undefined;
           const streamingBehavior = command.streamingBehavior as "steer" | "followUp" | undefined;
           let preflightAccepted = false;
@@ -535,7 +548,7 @@ export class AgentSessionWrapper {
             }
           }).catch((error) => {
             console.error(
-              "[ATE Agent] prompt completion handler failed:",
+              "[Wireless ATE Agent] prompt completion handler failed:",
               error instanceof Error ? error.message : error,
             );
           });
@@ -616,21 +629,34 @@ export class AgentSessionWrapper {
 
         const sessionDir = sessionManager.getSessionDir();
         let newSessionFile: string;
+        let forkedManager: SessionManager;
 
         if (!entry.parentId) {
           // Fork before the first message: create an empty session linked to this one
           const newManager = SessionManager.create(sessionManager.getCwd(), sessionDir);
           newManager.newSession({ parentSession: currentSessionFile });
           newSessionFile = newManager.getSessionFile() as string;
+          forkedManager = newManager;
         } else {
           // Fork after some history: copy path up to (but not including) the fork point
           const sourceManager = SessionManager.open(currentSessionFile, sessionDir);
           const forkedPath = sourceManager.createBranchedSession(entry.parentId);
           if (!forkedPath) throw new Error("Failed to create forked session");
           newSessionFile = forkedPath;
+          forkedManager = sourceManager;
         }
 
-        const newSessionId = SessionManager.open(newSessionFile, sessionDir).getSessionId();
+        // Pi defers files without an assistant message. A fork before the first
+        // user message now contains the scene custom entry but no assistant, so
+        // persist that valid branch explicitly before caching/opening its path.
+        if (!existsSync(newSessionFile)) {
+          const header = forkedManager.getHeader();
+          if (!header) throw new Error("Forked session is missing its header");
+          const fileEntries = [header, ...forkedManager.getEntries()];
+          writeFileSync(newSessionFile, `${fileEntries.map((item) => JSON.stringify(item)).join("\n")}\n`, "utf8");
+        }
+
+        const newSessionId = forkedManager.getSessionId();
         cacheSessionPath(newSessionId, newSessionFile);
         invalidateSessionListCache();
         await this.shutdown();
@@ -859,7 +885,7 @@ export class AgentSessionWrapper {
           await this.waitForExtensionsBound();
         } catch (error) {
           console.error(
-            "[ATE Agent] extension binding failed before session shutdown:",
+            "[Wireless ATE Agent] extension binding failed before session shutdown:",
             error instanceof Error ? error.message : error,
           );
         }
@@ -1379,7 +1405,7 @@ export class AgentSessionWrapper {
       get theme() { return PLAIN_TEXT_THEME; },
       getAllThemes: () => [],
       getTheme: () => undefined,
-      setTheme: () => ({ success: false, error: "Theme switching is not supported in ATE Agent extension UI yet" }),
+      setTheme: () => ({ success: false, error: "Theme switching is not supported in Wireless ATE Agent extension UI yet" }),
       getToolsExpanded: () => false,
       setToolsExpanded: () => {},
     };
@@ -1535,6 +1561,7 @@ export function getRpcSessionInfos(): SessionInfo[] {
       messageCount: messages.length,
       firstMessage: firstUserMessage ? runtimeMessageText(firstUserMessage) || "(no messages)" : "(no messages)",
       transient: !persisted,
+      sceneId: session.sceneId,
     });
   }
   return sessions;
@@ -1622,7 +1649,7 @@ export async function startRpcSession(
   cwd: string | undefined,
   options: RpcSessionStartOptions = {},
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
-  const { toolNames, initialModel, thinkingLevel, promptLocale } = options;
+  const { toolNames, initialModel, thinkingLevel, promptLocale, sceneId: requestedSceneId } = options;
   const registry = getRegistry();
   const locks = getLocks();
 
@@ -1641,6 +1668,11 @@ export async function startRpcSession(
   } else {
     if (!cwd) throw new Error("cwd is required for a new session");
     sessionManager = SessionManager.create(cwd, undefined);
+  }
+  const persistedSceneId = getSceneIdFromEntries(sessionManager.getEntries());
+  const sceneId = sessionFile ? persistedSceneId : requestedSceneId ?? DEFAULT_SCENE_ID;
+  if (!sessionFile && sceneId && !persistedSceneId) {
+    sessionManager.appendCustomEntry(SCENE_BINDING_CUSTOM_TYPE, createSceneBindingData(sceneId));
   }
   const sessionCwd = sessionManager.getCwd();
   const finishStartingSession = trackStartingSession(sessionCwd);
@@ -1661,6 +1693,7 @@ export async function startRpcSession(
       extensionPaths: mcpExtensionPaths,
       skillPaths: mcpSkillPaths,
     } = await prepareBundledMcpAdapter(packageManager);
+    const sceneResources = sceneId ? getSceneResourceConfig(sceneId) : undefined;
 
     // Determine which tools to pass based on requested toolNames.
     // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
@@ -1670,7 +1703,7 @@ export async function startRpcSession(
       // Otherwise DO NOT pass a builtin-only allow-list: passing CODING_TOOL_NAMES
       // set allowedToolNames to coding builtins only, which filtered every
       // extension/package-provided tool (e.g. subagents, web access) out of the
-      // tool registry — so they were unavailable in ATE Agent sessions even though the
+      // tool registry — so they were unavailable in Wireless ATE Agent sessions even though the
       // `pi` CLI keeps them. Leaving the allow-list unset lets the SDK register all
       // tools (and activate extension tools); we narrow the ACTIVE set below.
       toolsOption = toolNames.length === 0 ? [] : undefined;
@@ -1681,9 +1714,12 @@ export async function startRpcSession(
     // Gate untrusted project extensions so opening a repository does not run
     // its .pi/extensions code automatically (see lib/project-trust.ts, #236).
     const trustReloadOptions = projectTrustReloadOptions(sessionCwd, agentDir);
+    // Scene profiles remain the Agent identity even when the user disables all
+    // tools. Preserve the legacy empty-prompt behavior only for unclassified sessions.
+    const forceEmptySystemPrompt = toolNames?.length === 0 && !sceneId;
     const promptLocaleState: PromptLocaleState = {
       current: normalizePromptLocale(promptLocale),
-      forceEmpty: toolNames?.length === 0,
+      forceEmpty: forceEmptySystemPrompt,
     };
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
@@ -1691,7 +1727,10 @@ export async function startRpcSession(
       settingsManager,
       resourceLoaderOptions: {
         additionalExtensionPaths: mcpExtensionPaths,
-        additionalSkillPaths: mcpSkillPaths,
+        additionalSkillPaths: [
+          ...mcpSkillPaths,
+          ...(sceneResources?.skillPaths ?? []),
+        ],
         extensionFactories: [
           createPromptLocaleExtension(promptLocaleState),
           createProjectCommandBashExtension({
@@ -1700,6 +1739,19 @@ export async function startRpcSession(
           }),
         ],
         extensionsOverride: preferUserBashExtension,
+        ...(sceneResources
+          ? {
+              agentsFilesOverride: (base: { agentsFiles: Array<{ path: string; content: string }> }) => ({
+                agentsFiles: [
+                  ...base.agentsFiles,
+                  {
+                    path: sceneResources.instructionsPath,
+                    content: sceneResources.instructionsContent,
+                  },
+                ],
+              }),
+            }
+          : {}),
       },
       ...(trustReloadOptions ? { resourceLoaderReloadOptions: trustReloadOptions } : {}),
     });
@@ -1748,16 +1800,16 @@ export async function startRpcSession(
 
     // If specific tool names were requested (non-empty), set the active tools to the
     // requested builtin coding tools PLUS all extension/package tools, so installed
-    // extensions stay usable in ATE Agent just like in the `pi` CLI.
+    // extensions stay usable in Wireless ATE Agent just like in the `pi` CLI.
     if (toolNames && toolNames.length > 0) {
       inner.setActiveToolsByName(withExtensionTools(inner, toolNames));
     }
 
-    const wrapper = new AgentSessionWrapper(inner, promptLocaleState);
+    const wrapper = new AgentSessionWrapper(inner, promptLocaleState, sceneId);
     // When all tools are disabled, clear the system prompt entirely.
     // pi's buildSystemPrompt always produces a non-empty prompt even with no tools;
     // keep this forced after extension resource discovery and reloads as well.
-    if (toolNames?.length === 0) {
+    if (forceEmptySystemPrompt) {
       wrapper.setForceEmptySystemPrompt(true);
     }
     wrapper.start();
@@ -1768,7 +1820,7 @@ export async function startRpcSession(
 
     wrapper.onDestroy(() => registry.delete(realSessionId));
     registry.set(realSessionId, wrapper);
-    wrapper.beginExtensionBinding({ forceEmptySystemPrompt: toolNames?.length === 0 });
+    wrapper.beginExtensionBinding({ forceEmptySystemPrompt });
 
     return { session: wrapper, realSessionId };
   })().finally(() => {

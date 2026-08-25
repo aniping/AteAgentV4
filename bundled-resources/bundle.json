@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "bundleVersion": "1",
+  "defaultSceneId": "requirements",
+  "scenes": [
+    {
+      "id": "requirements",
+      "label": "需求",
+      "labelEn": "Requirements",
+      "agentName": "需求分析 Agent",
+      "agentNameEn": "Requirements Agent",
+      "description": "澄清目标、边界、约束与验收标准",
+      "descriptionEn": "Clarify goals, boundaries, constraints, and acceptance criteria",
+      "accent": "#06b6d4",
+      "instructions": "scenes/requirements/AGENTS.md",
+      "skillPaths": ["scenes/requirements/skills"]
+    },
+    {
+      "id": "design",
+      "label": "设计",
+      "labelEn": "Design",
+      "agentName": "工程设计 Agent",
+      "agentNameEn": "Engineering Design Agent",
+      "description": "完成系统、射频、硬件、软件与 ATE 方案设计",
+      "descriptionEn": "Design system, RF, hardware, software, and ATE solutions",
+      "accent": "#8b5cf6",
+      "instructions": "scenes/design/AGENTS.md",
+      "skillPaths": ["scenes/design/skills"]
+    },
+    {
+      "id": "development",
+      "label": "开发",
+      "labelEn": "Development",
+      "agentName": "开发实现 Agent",
+      "agentNameEn": "Development Agent",
+      "description": "依据已确认方案实现软硬件与自动化能力",
+      "descriptionEn": "Implement approved software, hardware, and automation solutions",
+      "accent": "#3b82f6",
+      "instructions": "scenes/development/AGENTS.md",
+      "skillPaths": ["scenes/development/skills"]
+    },
+    {
+      "id": "integration",
+      "label": "联调",
+      "labelEn": "Integration",
+      "agentName": "联调诊断 Agent",
+      "agentNameEn": "Integration Agent",
+      "description": "跨系统定位接口、时序、信号与环境问题",
+      "descriptionEn": "Diagnose cross-system interface, timing, signal, and environment issues",
+      "accent": "#f59e0b",
+      "instructions": "scenes/integration/AGENTS.md",
+      "skillPaths": ["scenes/integration/skills"]
+    },
+    {
+      "id": "testing",
+      "label": "测试",
+      "labelEn": "Testing",
+      "agentName": "测试验证 Agent",
+      "agentNameEn": "Testing Agent",
+      "description": "规划、执行并沉淀可追溯的验证证据",
+      "descriptionEn": "Plan, execute, and record traceable verification evidence",
+      "accent": "#22c55e",
+      "instructions": "scenes/testing/AGENTS.md",
+      "skillPaths": ["scenes/testing/skills"]
+    }
+  ]
+}

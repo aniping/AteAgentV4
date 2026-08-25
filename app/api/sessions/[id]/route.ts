@@ -14,6 +14,7 @@ import { sessionPathKey } from "@/lib/session-path";
 import { getRpcSession } from "@/lib/rpc-manager";
 import { projectTreeForResponse } from "@/lib/project-tree";
 import { computeSessionTotalActiveMs } from "@/lib/session-timing";
+import { getSceneIdFromEntries } from "@/lib/session-scene";
 
 export async function GET(
   req: Request,
@@ -62,6 +63,7 @@ export async function GET(
         : "(no messages)",
       parentSessionId,
       transient: !filePath || !existsSync(filePath),
+      sceneId: liveRpc?.sceneId ?? getSceneIdFromEntries(entries),
     } : null;
 
     return NextResponse.json({
