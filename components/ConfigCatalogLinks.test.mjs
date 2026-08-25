@@ -71,6 +71,37 @@ test("ZIP-installed skills offer a complete uninstall action", () => {
   assert.match(html, />Uninstall<\/button>/);
 });
 
+test("scene-bundled skills are visible but read-only", () => {
+  const html = withI18n(React.createElement(SkillDetail, {
+    skill: {
+      name: "rf-budget",
+      description: "RF budget",
+      filePath: "C:/Wireless ATE Agent/bundled-resources/scenes/design/skills/rf-budget/SKILL.md",
+      baseDir: "C:/Wireless ATE Agent/bundled-resources/scenes/design/skills/rf-budget",
+      disableModelInvocation: false,
+      sourceInfo: { source: "path", scope: "path" },
+      builtInSceneId: "design",
+      readOnly: true,
+    },
+    cwd: "C:/project",
+    onToggle() { throw new Error("read-only Skill must not expose a toggle"); },
+    toggling: false,
+    saveError: null,
+    checkingUpdate: false,
+    updating: false,
+    updateError: null,
+    onCheckUpdate() {},
+    onUpdate() {},
+    uninstalling: false,
+    uninstallError: null,
+    onUninstall() {},
+  }));
+
+  assert.match(html, /Built into the current scene/);
+  assert.match(html, />Read-only<\/span>/);
+  assert.doesNotMatch(html, /role="switch"/);
+});
+
 test("plugin installation links to the filtered Pi extension catalog", () => {
   const html = withI18n(React.createElement(AddPluginPanel, {
     cwd: "C:/project",

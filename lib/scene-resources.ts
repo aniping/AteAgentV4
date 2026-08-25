@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "fs";
 import { resolve, sep } from "path";
+import { isPathWithinRoots } from "./path-security";
 import { getSceneDefinition, type SceneId } from "./scenes";
 
 export interface SceneResourceConfig {
@@ -39,4 +40,8 @@ export function getSceneResourceConfig(sceneId: SceneId): SceneResourceConfig {
     instructionsContent: readFileSync(instructionsPath, "utf8"),
     skillPaths: scene.skillPaths.map((skillPath) => resolveBundledPath(root, skillPath)),
   };
+}
+
+export function isBundledSceneSkillPath(filePath: string, skillPaths: readonly string[]): boolean {
+  return isPathWithinRoots(filePath, new Set(skillPaths));
 }

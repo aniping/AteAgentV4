@@ -12,6 +12,7 @@ import type {
   SkillUpdateResult,
 } from "@/lib/api-types";
 import { MAX_SKILL_ARCHIVE_LABEL } from "@/lib/skill-archive-limits";
+import type { SceneId } from "@/lib/scenes";
 
 function shortenPath(p: string): string {
   // Match common home dir patterns: /Users/xxx, /home/xxx
@@ -19,6 +20,7 @@ function shortenPath(p: string): string {
 }
 
 function sourceLabel(skill: Skill): string {
+  if (skill.builtInSceneId) return "built-in";
   const src = skill.sourceInfo?.source;
   const scope = skill.sourceInfo?.scope;
   if (scope === "user" || src === "user") return "global";
@@ -39,6 +41,7 @@ function updateKey(skill: Skill): string | null {
 }
 
 const SKILL_GROUP_ORDER = [
+  "built-in",
   "project / skills.sh",
   "project",
   "global / skills.sh",
@@ -271,11 +274,20 @@ export function SkillDetail({
           >
             {displayPath(skill.filePath)}
           </span>
-          <Toggle
-            enabled={enabled}
-            loading={toggling}
-            onToggle={() => onToggle(skill)}
-          />
+          {skill.readOnly ? (
+            <span
+              title={t("i18n.builtInSceneSkill")}
+              style={{ fontSize: 10, color: "var(--text-dim)", flexShrink: 0 }}
+            >
+              {t("i18n.readOnly")}
+            </span>
+          ) : (
+            <Toggle
+              enabled={enabled}
+              loading={toggling}
+              onToggle={() => onToggle(skill)}
+            />
+          )}
         </div>
         <div
           style={{
@@ -1172,10 +1184,12 @@ export function AddSkillPanel({
 
 export function SkillsConfig({
   cwd,
+  sceneId,
   onClose,
   onResourcesChanged,
 }: {
   cwd: string;
+  sceneId?: SceneId;
   onClose: () => void;
   onResourcesChanged?: () => void;
 }) {
@@ -1202,7 +1216,9 @@ export function SkillsConfig({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/skills?cwd=${encodeURIComponent(cwd)}`);
+      const query = new URLSearchParams({ cwd });
+      if (sceneId) query.set("sceneId", sceneId);
+      const res = await fetch(`/api/skills?${query.toString()}`);
       const d = (await res.json()) as Partial<SkillsResponse> & { error?: string };
       if (!res.ok || d.error) throw new Error(d.error ?? `HTTP ${res.status}`);
       const list = d.skills ?? [];
@@ -1227,13 +1243,13 @@ export function SkillsConfig({
     } finally {
       setLoading(false);
     }
-  }, [cwd]);
+  }, [cwd, sceneId]);
 
   useEffect(() => {
     setUpdateStatuses({});
     setUpdateError(null);
     void loadSkills();
-  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cwd, sceneId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const checkForUpdates = useCallback(async (skill?: Skill) => {
     const targets = skill
@@ -1324,6 +1340,7 @@ export function SkillsConfig({
   }, [cwd, loadSkills]);
 
   const toggle = useCallback(async (skill: Skill) => {
+    if (skill.readOnly) return;
     const next = !skill.disableModelInvocation;
     setToggling((s) => new Set(s).add(skill.filePath));
     setSaveError(null);

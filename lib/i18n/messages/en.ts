@@ -285,6 +285,8 @@ export const enLocale: LocalePlugin = {
     "i18n.hiddenFromPrompt": "Hidden from model prompt — click to enable",
     "i18n.dormant": "Dormant",
     "i18n.hiddenButInvocable": "Hidden from model, still manually invocable",
+    "i18n.builtInSceneSkill": "Built into the current scene",
+    "i18n.readOnly": "Read-only",
     "i18n.skillSearchPlaceholder": "e.g. react, testing, deploy",
     "i18n.searching": "Searching…",
     "i18n.noSkills": "No skills found",

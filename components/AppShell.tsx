@@ -1108,6 +1108,7 @@ export function AppShell() {
 
   const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
+  const effectiveSceneId = selectedSession?.sceneId ?? (selectedSession ? undefined : activeSceneId);
   const titleSceneId = selectedSession ? selectedSession.sceneId : activeSceneId;
   const titleScene = titleSceneId ? getSceneDefinition(titleSceneId) : undefined;
   const windowTitle = activeCwdName && titleScene
@@ -2314,7 +2315,7 @@ export function AppShell() {
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}
               newSessionCwd={effectiveNewSessionCwd}
               newSessionDraftKey={newSessionDraftKey}
-              sceneId={selectedSession?.sceneId ?? (selectedSession ? undefined : activeSceneId)}
+              sceneId={effectiveSceneId}
               onAgentEnd={handleAgentEnd}
               onAttentionNeeded={handleAttentionNeeded}
               onSessionCreated={handleSessionCreated}
@@ -2484,6 +2485,7 @@ export function AppShell() {
     {skillsConfigOpen && projectTrustCwd && (
       <SkillsConfig
         cwd={projectTrustCwd}
+        sceneId={effectiveSceneId}
         onClose={() => setSkillsConfigOpen(false)}
         onResourcesChanged={() => setSessionKey((key) => key + 1)}
       />
