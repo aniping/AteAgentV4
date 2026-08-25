@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -131,6 +132,77 @@ test("Skill validation rejects duplicate names inside one scene", async () => {
         assert.match(error.message, /Bundled Skill validation failed/);
         assert.match(error.message, /\[design\]/);
         assert.match(error.message, /collision|duplicate|same name/i);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Skill validation rejects links in supporting resource directories", async (t) => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-skills-linked-resource-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    const externalRoot = join(tempRoot, "external-assets");
+    cpSync(sourceRoot, bundleRoot, { recursive: true });
+    mkdirSync(externalRoot, { recursive: true });
+    writeFileSync(join(externalRoot, "company-secret.txt"), "must not be packaged\n", "utf8");
+    const skillRoot = join(bundleRoot, "scenes", "development", "skills");
+    writeSkill(skillRoot, "linked-resource", "linked-resource");
+    try {
+      symlinkSync(
+        externalRoot,
+        join(skillRoot, "linked-resource", "references"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+    } catch (error) {
+      if (error?.code === "EPERM") {
+        t.skip("creating filesystem links is not permitted on this host");
+        return;
+      }
+      throw error;
+    }
+
+    await assert.rejects(
+      () => validateBundledSkills(bundleRoot),
+      (error) => {
+        assert.match(error.message, /Bundled Skill validation failed/);
+        assert.match(error.message, /\[development\]/);
+        assert.match(error.message, /link|outside/i);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Skill validation rejects a declared Skill root that is a filesystem link", async (t) => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-skills-linked-root-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    cpSync(sourceRoot, bundleRoot, { recursive: true });
+    const skillRoot = join(bundleRoot, "scenes", "development", "skills");
+    const linkedTarget = join(bundleRoot, "scenes", "development", "linked-skill-target");
+    rmSync(skillRoot, { recursive: true, force: true });
+    writeSkill(linkedTarget, "company-development", "company-development");
+    try {
+      symlinkSync(linkedTarget, skillRoot, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (error?.code === "EPERM") {
+        t.skip("creating filesystem links is not permitted on this host");
+        return;
+      }
+      throw error;
+    }
+
+    await assert.rejects(
+      () => validateBundledSkills(bundleRoot),
+      (error) => {
+        assert.match(error.message, /Bundled Skill validation failed/);
+        assert.match(error.message, /\[development\]/);
+        assert.match(error.message, /link/i);
         return true;
       },
     );
