@@ -171,7 +171,7 @@ test("stale fresh-session completion cannot replace the active composer", () => 
     appShellSource.indexOf("  const handleAgentEnd = useCallback"),
   );
 
-  assert.match(newSessionSource, /const draftKey = `new:\$\{sessionId\}:\$\{cwd\}`/);
+  assert.match(newSessionSource, /const draftKey = buildNewSessionDraftKey\(activeSceneId, sessionId, cwd\)/);
   assert.match(newSessionSource, /activeNewSessionDraftKeyRef\.current = draftKey/);
   assert.match(createdSource, /activeNewSessionDraftKeyRef\.current !== sourceDraftKey/);
   assert.match(cwdChangeSource, /const currentFreshCwd = newSessionCwd \?\? activeCwd/);

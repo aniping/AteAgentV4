@@ -444,7 +444,7 @@ export const enLocale: LocalePlugin = {
     "i18n.skillZipOnly": "Please choose a .zip file.",
     "i18n.skillZipSingle": "Please choose one ZIP file at a time.",
     "i18n.skillZipHint": "Portable archives must contain exactly one SKILL.md. Integration archives may also declare checksummed runtime files.",
-    "i18n.skillZipTrustWarning": "Only install trusted ZIP files. Bundled runtime programs can be executed by ATE Agent after installation.",
+    "i18n.skillZipTrustWarning": "Only install trusted ZIP files. Bundled runtime programs can be executed by Wireless ATE Agent after installation.",
     "i18n.skillZipInstalled": "Skill {name} installed.",
     "i18n.skillIntegrationInstalled": "Skill {name} and its integration runtime installed.",
     "i18n.uninstallArchive": "Uninstall",

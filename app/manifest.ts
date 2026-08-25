@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "ATE Agent",
-    short_name: "ATE Agent",
+    name: "Wireless ATE Agent",
+    short_name: "Wireless ATE",
     description: "Intelligent assistant for wireless equipment",
     start_url: "/",
     scope: "/",

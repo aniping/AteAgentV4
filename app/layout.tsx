@@ -11,9 +11,9 @@ const notoSansMono = Noto_Sans_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ATE Agent",
-  description: "ATE Agent — intelligent assistant for wireless equipment",
-  applicationName: "ATE Agent",
+  title: "Wireless ATE Agent",
+  description: "Wireless ATE Agent — intelligent assistant for wireless equipment",
+  applicationName: "Wireless ATE Agent",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "ATE Agent",
+    title: "Wireless ATE Agent",
   },
   formatDetection: {
     telephone: false,
