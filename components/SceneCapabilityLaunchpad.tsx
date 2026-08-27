@@ -134,6 +134,14 @@ const SCENE_CAPABILITIES: Readonly<Record<SceneId, SceneCapabilityProfile>> = {
   },
 };
 
+const COMPACT_SCENE_LABELS: Readonly<Record<SceneId, LocalizedText>> = {
+  requirements: { zh: "需求", en: "Reqs" },
+  design: { zh: "设计", en: "Design" },
+  development: { zh: "开发", en: "Dev" },
+  integration: { zh: "联调", en: "Integr." },
+  testing: { zh: "测试", en: "Test" },
+};
+
 function isChineseLocale(locale: string): boolean {
   return locale.toLowerCase().startsWith("zh");
 }
@@ -175,13 +183,41 @@ export function SceneCapabilityLaunchpad({
               key={scene.id}
               type="button"
               className={`scene-capability-card${active ? " scene-capability-card--active" : ""}`}
-              style={{ "--scene-card-accent": scene.accent } as CSSProperties}
+              style={{
+                "--scene-card-accent": scene.accent,
+              } as CSSProperties}
+              aria-label={getSceneLabel(scene, locale)}
               aria-pressed={active}
+              title={getSceneLabel(scene, locale)}
               onClick={() => onSceneChange(scene.id)}
             >
               <span className="scene-capability-card-number">{String(index + 1).padStart(2, "0")}</span>
-              <strong>{getSceneLabel(scene, locale)}</strong>
-              {active && <span className="scene-capability-current">{isZh ? "当前" : "Active"}</span>}
+              <strong>
+                <span className="scene-capability-card-label-full">{getSceneLabel(scene, locale)}</span>
+                <span className="scene-capability-card-label-compact" aria-hidden="true">
+                  {localize(COMPACT_SCENE_LABELS[scene.id], locale)}
+                </span>
+              </strong>
+              <span
+                className={active ? "scene-capability-current" : "scene-capability-select-hint"}
+                aria-hidden="true"
+              >
+                {active ? (
+                  <>
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path d="m2.4 6.2 2.1 2.1 5.1-5.1" />
+                    </svg>
+                    <span>{isZh ? "已选" : "Selected"}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{isZh ? "选择" : "Choose"}</span>
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6h7M6.8 3.3 9.5 6 6.8 8.7" />
+                    </svg>
+                  </>
+                )}
+              </span>
               <p>{getSceneDescription(scene, locale)}</p>
               <span className="scene-capability-output">
                 {isZh ? "交付" : "Output"} · {localize(itemProfile.deliverables[0], locale)}

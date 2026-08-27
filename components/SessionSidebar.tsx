@@ -440,10 +440,13 @@ export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange
   const [showUnclassified, setShowUnclassified] = useState(false);
 
   useEffect(() => {
-    if (!selectedSessionId) return;
+    if (!selectedSessionId) {
+      setShowUnclassified(false);
+      return;
+    }
     const selected = allSessions.find((session) => session.id === selectedSessionId);
     if (selected) setShowUnclassified(!selected.sceneId);
-  }, [allSessions, selectedSessionId]);
+  }, [activeSceneId, allSessions, selectedSessionId]);
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
   const [explorerRefreshDone, setExplorerRefreshDone] = useState(false);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
@@ -907,6 +910,7 @@ export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange
 
   const handleNewSession = useCallback(() => {
     if (!selectedCwd) return;
+    setShowUnclassified(false);
     // Generate a temporary UUID client-side — no backend call needed.
     // Pi will be spawned lazily when the user sends the first message.
     const tempId = typeof crypto.randomUUID === "function"
@@ -1083,22 +1087,21 @@ export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange
           </div>
         </div>
         <div
+          className="sidebar-scene-selector"
           role="navigation"
           aria-label={locale === "zh-CN" ? "工作场景" : "Work scenes"}
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-            gap: 4,
             marginBottom: unclassifiedCount > 0 ? 6 : 10,
           }}
         >
           {SCENES.map((scene) => {
-            const active = scene.id === activeSceneId;
+            const active = !showUnclassified && scene.id === activeSceneId;
             const count = projectSessions.filter((session) => session.sceneId === scene.id).length;
             return (
               <button
                 key={scene.id}
                 type="button"
+                className={`sidebar-scene-button${active ? " sidebar-scene-button--active" : ""}`}
                 aria-pressed={active}
                 title={`${getSceneLabel(scene, locale)} · ${count}`}
                 onClick={() => {
@@ -1106,27 +1109,18 @@ export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange
                   onSceneChange(scene.id);
                 }}
                 style={{
-                  position: "relative",
-                  minWidth: 0,
-                  height: 31,
-                  padding: "0 3px",
-                  overflow: "hidden",
-                  border: `1px solid ${active ? `color-mix(in srgb, ${scene.accent} 55%, var(--border))` : "var(--border)"}`,
-                  borderRadius: 8,
-                  background: active
-                    ? `linear-gradient(145deg, color-mix(in srgb, ${scene.accent} 18%, var(--bg-panel)), var(--bg-panel))`
-                    : "var(--bg-panel)",
-                  color: active ? scene.accent : "var(--text-muted)",
-                  boxShadow: active ? `0 6px 18px color-mix(in srgb, ${scene.accent} 13%, transparent)` : "none",
-                  cursor: "pointer",
-                  fontSize: locale === "zh-CN" ? 11 : 9,
-                  fontWeight: active ? 700 : 500,
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  transition: "background 0.15s, border-color 0.15s, color 0.15s",
-                }}
+                  "--sidebar-scene-accent": scene.accent,
+                  "--sidebar-scene-font-size": locale === "zh-CN" ? "11px" : "9px",
+                } as CSSProperties}
               >
-                {getSceneLabel(scene, locale)}
+                <span className="sidebar-scene-button-label">{getSceneLabel(scene, locale)}</span>
+                {active && (
+                  <span className="sidebar-scene-selected-mark" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" fill="none">
+                      <path d="m2.4 6.2 2.1 2.1 5.1-5.1" />
+                    </svg>
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1760,6 +1754,8 @@ export function SessionSidebar({ selectedSessionId, activeSceneId, onSceneChange
         >
           <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
             <button
+              data-file-explorer-toggle="true"
+              aria-expanded={explorerOpen}
               onClick={() => setExplorerOpen((open) => {
                 const next = !open;
                 saveExplorerOpen(next);

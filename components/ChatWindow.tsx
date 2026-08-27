@@ -633,7 +633,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
                   <div className="ate-brand-subtitle">{t("brand.subtitle")}</div>
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+              <div className="scene-capability-version" style={{ flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   ui <span style={{ color: "var(--text)" }}>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
                 </span>

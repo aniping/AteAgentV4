@@ -24,6 +24,7 @@ test("renders all five engineering scenes and exposes the active scene", () => {
     assert.match(html, new RegExp(`>${label}<`));
   }
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1);
+  assert.equal((html.match(/>已选<\/span>/g) ?? []).length, 1);
   assert.match(html, /联调诊断 Agent/);
   assert.match(html, /交付 · 根因证据/);
 
@@ -38,6 +39,7 @@ test("renders all five engineering scenes and exposes the active scene", () => {
     assert.match(englishHtml, new RegExp(`>${label}<`));
   }
   assert.match(englishHtml, /Engineering Design Agent/);
+  assert.equal((englishHtml.match(/>Selected<\/span>/g) ?? []).length, 1);
 });
 
 test("uses the capability launchpad as the default new-session experience", async () => {
