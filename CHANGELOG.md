@@ -4,10 +4,11 @@
 
 产品 UI 版本从 `0.1.0` 开始独立记录；此前的 pi-web 上游版本历史可通过 Git 提交查询。最新版本始终排在最前。
 
-## 未发布
+## 0.1.8 - 2026-08-27
 
-- **修复**：`127/localhost` 或当前电脑网卡地址上的 HTTP 服务即使返回 `X-Frame-Options: DENY` 或 CSP `frame-ancestors`，也可通过右侧浏览器完整加载 Vite 根路径资源、同源 API、表单请求和 WebSocket；Markdown 文件预览恢复占满面板，不再用窄阅读列挤压标题与表格。
-- **安全**：兼容代理只接受 loopback 与当前电脑实际拥有的 RFC1918 IPv4 / ULA IPv6 地址，逐次连接重新校验并拒绝当前应用、活动代理、公网、link-local 和同网段其他设备；预览入口仍只监听 loopback 并校验 Host/Origin。
+- **新增**：右侧浏览器可通过本机兼容代理预览 `localhost`、loopback 与当前电脑实际网卡地址上的 HTTP 服务；即使目标返回 `X-Frame-Options: DENY` 或 CSP `frame-ancestors`，Vite 根路径资源、同源 API、表单请求与 WebSocket 仍可正常工作。
+- **改进**：Markdown 文件预览恢复占满可用面板，并按容器宽度调整内边距，不再用固定窄阅读列挤压标题、表格和正文。
+- **安全**：兼容代理仅接受当前电脑实际拥有的 RFC1918 IPv4 / ULA IPv6 地址与 loopback，并在每次 HTTP、WebSocket 连接时重新校验；继续拒绝当前应用、活动代理、公网、link-local 与同网段其他设备。
 
 ## 0.1.7 - 2026-08-27
 
