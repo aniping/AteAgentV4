@@ -451,6 +451,11 @@ html:not(.dark) .scene-capability-empty {
 }
 
 .scene-capability-shell {
+  --scene-capability-gutter: 16px;
+  --scene-capability-space-tight: 12px;
+  --scene-capability-space-group: 16px;
+  --scene-capability-space-section: 20px;
+
   width: min(1280px, 100%);
   min-width: 0;
   margin-block: auto;
@@ -458,11 +463,11 @@ html:not(.dark) .scene-capability-empty {
 }
 
 .scene-capability-brand {
-  margin: 0 16px 10px;
+  margin: 0 var(--scene-capability-gutter) var(--scene-capability-space-section);
 }
 
 .scene-capability-launchpad {
-  margin-bottom: 12px;
+  margin-bottom: var(--scene-capability-space-section);
   color: var(--text);
 }
 
@@ -471,7 +476,7 @@ html:not(.dark) .scene-capability-empty {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin: 0 16px 10px;
+  margin: 0 var(--scene-capability-gutter) var(--scene-capability-space-tight);
 }
 
 .scene-capability-heading h1 {
@@ -484,7 +489,7 @@ html:not(.dark) .scene-capability-empty {
 
 .scene-capability-heading p {
   max-width: 520px;
-  margin: 0 36px 1px 0;
+  margin: 0 0 1px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
@@ -504,7 +509,7 @@ html:not(.dark) .scene-capability-empty {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
-  margin: 0 16px;
+  margin: 0 var(--scene-capability-gutter);
 }
 
 .scene-capability-card {
@@ -612,7 +617,7 @@ html:not(.dark) .scene-capability-empty {
   display: grid;
   grid-template-columns: minmax(220px, 0.78fr) minmax(0, 2.22fr);
   min-height: 174px;
-  margin: 10px 16px 0;
+  margin: var(--scene-capability-space-group) var(--scene-capability-gutter) 0;
   overflow: hidden;
   background: var(--bg-panel);
   border: 1px solid color-mix(in srgb, var(--scene-accent) 42%, var(--border));
@@ -759,12 +764,10 @@ html:not(.dark) .scene-capability-empty {
     padding-bottom: 12px;
   }
 
-  .scene-capability-brand {
-    margin-bottom: 5px;
-  }
-
-  .scene-capability-heading {
-    margin-bottom: 7px;
+  .scene-capability-shell {
+    --scene-capability-space-tight: 8px;
+    --scene-capability-space-group: 12px;
+    --scene-capability-space-section: 12px;
   }
 
   .scene-capability-heading h1 {
@@ -779,7 +782,6 @@ html:not(.dark) .scene-capability-empty {
 
   .scene-capability-detail {
     min-height: 150px;
-    margin-top: 8px;
   }
 
   .scene-capability-summary {
@@ -790,10 +792,6 @@ html:not(.dark) .scene-capability-empty {
   .scene-capability-groups {
     padding-top: 12px;
     padding-bottom: 12px;
-  }
-
-  .scene-capability-launchpad {
-    margin-bottom: 7px;
   }
 }
 
