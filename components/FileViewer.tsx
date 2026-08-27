@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import {
   Prism as SyntaxHighlighter,
   createElement as renderSyntaxNode,
@@ -23,6 +23,7 @@ import { parseFrontmatter } from "@/lib/frontmatter";
 import { markdownPreviewRehypePlugins, markdownPreviewRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
 import { CodeBlock, MermaidBlock } from "./MermaidBlock";
 import { FrontmatterCard } from "./FrontmatterCard";
+import { getFileIcon } from "./FileIcons";
 import { parseUnifiedPatch } from "@/lib/patch";
 import type { GitFileDiffResponse } from "@/lib/git-types";
 import { useI18n } from "@/hooks/useI18n";
@@ -55,10 +56,10 @@ interface FileData {
   size: number;
 }
 
-const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
-  source: "Source",
-  preview: "Preview",
-  diff: "Diff",
+const DISPLAY_MODE_LABEL_KEYS: Record<DisplayMode, string> = {
+  source: "i18n.source",
+  preview: "i18n.preview",
+  diff: "i18n.diff",
 };
 
 const FILE_CODE_STYLE: CSSProperties = {
@@ -235,6 +236,46 @@ function DownloadLink({ filePath, sourceSessionId }: { filePath: string; sourceS
         <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
     </a>
+  );
+}
+
+function FilePreviewHeader({
+  filePath,
+  cwd,
+  metadata,
+  watching,
+  children,
+}: {
+  filePath: string;
+  cwd?: string;
+  metadata?: string;
+  watching?: boolean;
+  children?: ReactNode;
+}) {
+  const { t } = useI18n();
+  const fileName = getFileName(filePath);
+
+  return (
+    <div className="file-viewer-toolbar">
+      <span className="file-viewer-file-icon">{getFileIcon(fileName, 14)}</span>
+      <span className="file-viewer-path" title={filePath}>
+        {getRelativeFilePath(filePath, cwd)}
+      </span>
+      {metadata && <span className="file-viewer-meta" title={metadata}>{metadata}</span>}
+      {watching !== undefined && (
+        <span
+          title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
+          role="status"
+          aria-live="polite"
+          className={watching ? "file-viewer-live-indicator is-live" : "file-viewer-live-indicator"}
+        >
+          <span className="file-viewer-live-text">
+            {watching ? t("i18n.liveSync") : t("i18n.notWatching")}
+          </span>
+        </span>
+      )}
+      {children}
+    </div>
   );
 }
 
@@ -423,7 +464,6 @@ function DiffView({ patch }: { patch: string }) {
 }
 
 function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Props) {
-  const { t } = useI18n();
   const [watching, setWatching] = useState(false);
   const [bust, setBust] = useState(0);
   const [size, setSize] = useState<number | null>(null);
@@ -509,43 +549,18 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "4px 16px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
-          background: "var(--bg)",
-          flexShrink: 0,
-        }}
+      <FilePreviewHeader
+        filePath={filePath}
+        cwd={cwd}
+        metadata={[
+          ext || "image",
+          naturalSize ? `${naturalSize.w} × ${naturalSize.h}` : null,
+          formatSizeStr,
+        ].filter(Boolean).join(" · ")}
+        watching={watching}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
-          {getRelativeFilePath(filePath, cwd)}
-        </span>
-        <span style={{ marginLeft: "auto" }}>{ext || "image"}</span>
-        {naturalSize && <span>{naturalSize.w} × {naturalSize.h}</span>}
-        {formatSizeStr && <span>{formatSizeStr}</span>}
-        <span
-          title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
-          style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: watching ? "#4ade80" : "var(--border)",
-              display: "inline-block",
-              boxShadow: watching ? "0 0 4px #4ade80" : "none",
-            }}
-          />
-          {watching ? "live" : "static"}
-        </span>
         <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />
-      </div>
+      </FilePreviewHeader>
       <div
         style={{
           flex: 1,
@@ -562,7 +577,7 @@ function ImageViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
         }}
       >
         {error ? (
-          <div style={{ color: "#f87171", fontSize: 13 }}>{error}</div>
+          <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -595,7 +610,6 @@ function formatDuration(seconds: number): string {
 }
 
 function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Props) {
-  const { t } = useI18n();
   const [watching, setWatching] = useState(false);
   const [bust, setBust] = useState(0);
   const [size, setSize] = useState<number | null>(null);
@@ -679,43 +693,18 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "4px 16px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
-          background: "var(--bg)",
-          flexShrink: 0,
-        }}
+      <FilePreviewHeader
+        filePath={filePath}
+        cwd={cwd}
+        metadata={[
+          ext || "audio",
+          duration != null ? formatDuration(duration) : null,
+          size != null ? formatSize(size) : null,
+        ].filter(Boolean).join(" · ")}
+        watching={watching}
       >
-        <span style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
-          {getRelativeFilePath(filePath, cwd)}
-        </span>
-        <span style={{ marginLeft: "auto" }}>{ext || "audio"}</span>
-        {duration != null && <span>{formatDuration(duration)}</span>}
-        {size != null && <span>{formatSize(size)}</span>}
-        <span
-          title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
-          style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)" }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: watching ? "#4ade80" : "var(--border)",
-              display: "inline-block",
-              boxShadow: watching ? "0 0 4px #4ade80" : "none",
-            }}
-          />
-          {watching ? "live" : "static"}
-        </span>
         <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />
-      </div>
+      </FilePreviewHeader>
       <div
         style={{
           flex: 1,
@@ -728,7 +717,7 @@ function AudioViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }: Pr
       >
         <div style={{ width: "min(680px, 100%)" }}>
           {error && (
-            <div style={{ color: "#f87171", fontSize: 13, marginBottom: 12, textAlign: "center" }}>
+            <div style={{ color: "var(--danger)", fontSize: 13, marginBottom: 12, textAlign: "center" }}>
               {error}
             </div>
           )}
@@ -864,45 +853,20 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "4px 16px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
-          background: "var(--bg)",
-          flexShrink: 0,
-        }}
+      <FilePreviewHeader
+        filePath={filePath}
+        cwd={cwd}
+        metadata={[
+          ext === "docx" ? t("i18n.documentPreview") : "PDF",
+          size != null ? formatSize(size) : null,
+        ].filter(Boolean).join(" · ")}
+        watching={watching}
       >
-        <span style={{ fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={filePath}>
-          {getRelativeFilePath(filePath, cwd)}
-        </span>
-        <span style={{ marginLeft: "auto" }}>{ext === "docx" ? "docx preview" : "pdf"}</span>
-        {size != null && <span>{formatSize(size)}</span>}
         <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />
-        <span
-          title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
-          style={{ display: "flex", alignItems: "center", gap: 4, color: watching ? "#4ade80" : "var(--text-dim)", flexShrink: 0 }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: watching ? "#4ade80" : "var(--border)",
-              display: "inline-block",
-              boxShadow: watching ? "0 0 4px #4ade80" : "none",
-            }}
-          />
-          {watching ? "live" : "static"}
-        </span>
-      </div>
+      </FilePreviewHeader>
       <div style={{ flex: 1, minHeight: 0, background: "var(--bg-panel)" }}>
         {error ? (
-          <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, color: "#f87171", fontSize: 13, textAlign: "center" }}>
+          <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, color: "var(--danger)", fontSize: 13, textAlign: "center" }}>
             {error}
           </div>
         ) : (
@@ -1275,7 +1239,7 @@ function TextFileViewer({
 
   if (error && !isDeletedDiff) {
     return (
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#f87171", fontSize: 13 }}>
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--danger)", fontSize: 13 }}>
         {error}
       </div>
     );
@@ -1300,41 +1264,16 @@ function TextFileViewer({
       ];
   const metadata = isDeletedDiff
     ? t("files.deleted")
-    : `${language} · ${lines.length} lines · ${formatSize(data!.size)}`;
+    : `${language} · ${t("i18n.lineCount", { count: lines.length })} · ${formatSize(data!.size)}`;
 
   return (
     <div className="file-viewer-shell" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        className="file-viewer-toolbar"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "5px 12px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          color: "var(--text-dim)",
-          background: "var(--bg)",
-          flexShrink: 0,
-        }}
+      <FilePreviewHeader
+        filePath={filePath}
+        cwd={cwd}
+        metadata={metadata}
+        watching={isDeletedDiff ? undefined : watching}
       >
-        <span className="file-viewer-path" style={{ fontFamily: "var(--font-mono)" }} title={filePath}>
-          {getRelativeFilePath(filePath, cwd)}
-        </span>
-
-        <span className="file-viewer-meta" title={metadata}>{metadata}</span>
-        {!isDeletedDiff && (
-          <span
-            title={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
-            aria-label={watching ? t("i18n.liveSync") : t("i18n.notWatching")}
-            className="file-viewer-live-indicator"
-            style={{
-              background: watching ? "#4ade80" : "var(--border)",
-              boxShadow: watching ? "0 0 4px #4ade80" : "none",
-            }}
-          />
-        )}
-
         <div className="file-viewer-controls">
           {displayModes.length > 1 && (
             <div className="file-viewer-mode-switch" aria-label={t("i18n.fileViewMode")}>
@@ -1353,7 +1292,7 @@ function TextFileViewer({
                       color: active ? "var(--text)" : "var(--text-muted)",
                     }}
                   >
-                    {DISPLAY_MODE_LABELS[mode]}
+                    {t(DISPLAY_MODE_LABEL_KEYS[mode])}
                   </button>
                 );
               })}
@@ -1414,17 +1353,20 @@ function TextFileViewer({
 
           {!isDeletedDiff && <DownloadLink filePath={filePath} sourceSessionId={sourceSessionId} />}
         </div>
-      </div>
+      </FilePreviewHeader>
 
       {/* Content area */}
       <div
         ref={contentRef}
         className="file-viewer-content"
+        role="region"
+        tabIndex={0}
+        aria-label={t("i18n.fileContent", { file: getFileName(filePath) })}
         onScroll={(event) => {
           viewerStateRef.current.scrollTop = event.currentTarget.scrollTop;
           viewerStateRef.current.scrollLeft = event.currentTarget.scrollLeft;
         }}
-        style={{ flex: 1, overflow: "auto", background: "var(--bg)" }}
+        style={{ flex: 1, overflow: "auto", background: "var(--file-preview-bg)" }}
       >
         {effectiveDisplayMode === "diff" && hasGitDiff ? (
           <DiffView patch={gitDiff.patch!} />
@@ -1432,14 +1374,11 @@ function TextFileViewer({
           <iframe
             srcDoc={content}
             sandbox="allow-scripts"
-            style={{ width: "100%", height: "100%", border: "none", background: "var(--bg)" }}
+            style={{ width: "100%", height: "100%", border: "none", background: "var(--file-preview-bg)" }}
              title={t("i18n.htmlPreview")}
           />
         ) : isMarkdown && effectiveDisplayMode === "preview" ? (
-          <div
-            className="markdown-body markdown-file-preview"
-            style={{ padding: "24px 32px" }}
-          >
+          <div className="markdown-body markdown-file-preview">
             {frontmatter?.data && <FrontmatterCard data={frontmatter.data} />}
             <ReactMarkdown
               remarkPlugins={markdownPreviewRemarkPlugins}
@@ -1514,7 +1453,7 @@ function TextFileViewer({
               margin: 0,
               padding: 0,
               border: 0,
-              background: "var(--bg)",
+              background: "var(--file-preview-bg)",
               ...FILE_CODE_STYLE,
               width: wrapLines ? "100%" : "max-content",
               minWidth: "100%",
