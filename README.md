@@ -114,6 +114,8 @@ build\release\Wireless-ATE-Agent-Setup-<版本>-win-<架构>.exe
 
 构建脚本入口是 `scripts\package-installer.cmd`，内部使用 Node.js 完成构建、下载、SHA-256 校验和文件整理，不依赖 PowerShell。
 
+Noto Sans Mono 字体已存放在 `app\fonts`，其 OFL 许可证随 `public\licenses` 一起进入安装包。Next.js 构建使用本地字体文件，不会访问 Google Fonts。安装器仍会按下述规则下载或复用官方 Node.js 运行时。
+
 构建会嵌入与当前电脑同架构的官方 Node.js 发行版。Node.js 压缩包会缓存到 `build\node-runtime`，后续打包无需重复下载。
 
 打包流程只会移除不影响运行的说明文档、源码映射和重复嵌套的 Mistral SDK，并校验 Node.js、npm/npx、pi 运行包及关键资源完整性。这样可以缩小体积，同时保留离线运行、后续 Node.js/pi 升级以及 Skill、插件安装与更新能力。脚本还会校验默认安装路径长度，防止生成在 Windows 上无法复制或安装的长路径文件。

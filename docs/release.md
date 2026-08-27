@@ -40,6 +40,7 @@ Notes:
 
 - This bumps `package.json` and `package-lock.json`.
 - It intentionally runs a production build. Do not run `next build` during normal development; release work is the exception.
+- The production build uses the vendored Noto Sans Mono files in `app/fonts` and does not contact Google Fonts.
 - If `npm view @agegr/pi-web version` briefly shows the previous version, check the exact version instead:
 
 ```bash

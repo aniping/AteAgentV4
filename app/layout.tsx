@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Sans_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { PwaRegistration } from "@/components/PwaRegistration";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const notoSansMono = Noto_Sans_Mono({
-  subsets: ["latin", "cyrillic"],
+const notoSansMono = localFont({
+  src: "./fonts/NotoSansMono-Variable.ttf",
   variable: "--font-noto-mono",
+  weight: "100 900",
+  style: "normal",
   display: "swap",
 });
 

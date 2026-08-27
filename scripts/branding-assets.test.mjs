@@ -6,6 +6,8 @@ import test from "node:test";
 const appFavicon = new URL("../app/favicon.ico", import.meta.url);
 const appIcon = new URL("../app/icon.svg", import.meta.url);
 const rootLayout = new URL("../app/layout.tsx", import.meta.url);
+const notoSansMono = new URL("../app/fonts/NotoSansMono-Variable.ttf", import.meta.url);
+const notoSansMonoLicense = new URL("../public/licenses/NotoSansMono-OFL.txt", import.meta.url);
 const manifest = new URL("../app/manifest.ts", import.meta.url);
 const pwaRegistration = new URL("../components/PwaRegistration.tsx", import.meta.url);
 const offlinePage = new URL("../public/offline.html", import.meta.url);
@@ -46,6 +48,32 @@ test("browser metadata uses the canonical Wireless ATE Agent icon", async () => 
   assert.match(layoutSource, /title:\s*"Wireless ATE Agent"/);
   assert.doesNotMatch(layoutSource, /Pi Web/i);
   assert.match(installerSource, /path\.join\(repoRoot, "app", "icon\.svg"\)/);
+});
+
+test("bundles the UI font without a Google Fonts build dependency", async () => {
+  const [layoutSource, font, license] = await Promise.all([
+    readFile(rootLayout, "utf8"),
+    readFile(notoSansMono),
+    readFile(notoSansMonoLicense, "utf8"),
+  ]);
+
+  assert.match(layoutSource, /from "next\/font\/local"/);
+  assert.doesNotMatch(layoutSource, /next\/font\/google/);
+  assert.match(layoutSource, /src:\s*"\.\/fonts\/NotoSansMono-Variable\.ttf"/);
+  assert.doesNotMatch(layoutSource, /fonts\.(?:googleapis|gstatic)\.com/);
+  assert.equal(
+    createHash("sha256").update(font).digest("hex"),
+    "2cb2adb378a8f574213e23df697050b83c54c27df465a2015552740b2769a081",
+  );
+  const normalizedLicense = license
+    .replaceAll("\r\n", "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n");
+  assert.equal(
+    createHash("sha256").update(normalizedLicense).digest("hex"),
+    "e2e177a32561584d4fc13aaa3cd8e53758a12910f013fe9ca125419111722029",
+  );
 });
 
 test("PWA metadata and assets use Wireless ATE Agent branding", async () => {
