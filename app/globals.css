@@ -2716,10 +2716,23 @@ html:not(.dark) .scene-capability-empty {
 
 /* File viewer markdown preview — larger headings */
 .markdown-file-preview {
-  width: min(100%, 78ch);
+  width: 100%;
+  max-width: none;
   min-height: 100%;
-  margin: 0 auto;
-  padding: 30px clamp(20px, 4vw, 48px);
+  margin: 0;
+  padding: 24px 32px;
+}
+
+@container (max-width: 640px) {
+  .markdown-file-preview {
+    padding: 20px;
+  }
+}
+
+@container (max-width: 400px) {
+  .markdown-file-preview {
+    padding: 16px 12px;
+  }
 }
 
 @media (max-height: 560px) {

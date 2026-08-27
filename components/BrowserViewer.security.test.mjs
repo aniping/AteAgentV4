@@ -19,6 +19,17 @@ test("browser preview grants only the iframe capabilities it needs", () => {
   assert.match(viewerSource, /referrerPolicy="strict-origin-when-cross-origin"/);
 });
 
+test("local services are loaded through the preview proxy instead of framed directly", () => {
+  assert.match(viewerSource, /fetch\("\/api\/browser-preview"/);
+  assert.match(viewerSource, /src=\{frameSource\}/);
+  assert.doesNotMatch(viewerSource, /src=\{currentUrl\}/);
+});
+
+test("stale preview bootstrap responses cannot replace a newer navigation", () => {
+  assert.match(viewerSource, /const requestId = \+\+previewRequestRef\.current/);
+  assert.match(viewerSource, /controller\.signal\.aborted \|\| previewRequestRef\.current !== requestId/);
+});
+
 test("an external-browser fallback remains available even when iframe errors are opaque", () => {
   const navigationStart = viewerSource.indexOf('<div className="browser-navigation">');
   const viewportStart = viewerSource.indexOf('<div className="browser-viewport"');

@@ -27,6 +27,8 @@ function isLoopbackHostname(hostname: string): boolean {
   const normalized = withoutIpv6Brackets(hostname);
   return normalized === "localhost"
     || normalized.endsWith(".localhost")
+    || normalized === "0.0.0.0"
+    || normalized === "::"
     || normalized === "::1"
     || /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
@@ -37,12 +39,10 @@ function isPrivateNetworkHostname(hostname: string): boolean {
   if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
     return octets[0] === 10
       || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
-      || (octets[0] === 192 && octets[1] === 168)
-      || (octets[0] === 169 && octets[1] === 254);
+      || (octets[0] === 192 && octets[1] === 168);
   }
 
-  return /^(?:fc|fd)[\da-f]{2}:/.test(normalized)
-    || /^fe[89ab][\da-f]:/.test(normalized);
+  return /^(?:fc|fd)[\da-f]{2}:/.test(normalized);
 }
 
 function shouldDefaultToHttp(address: string): boolean {
@@ -164,6 +164,20 @@ export function isLocalBrowserUrl(url: string | null): boolean {
   try {
     const hostname = new URL(url).hostname;
     return isLoopbackHostname(hostname) || isPrivateNetworkHostname(hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function shouldUseBrowserPreviewProxy(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const hostname = withoutIpv6Brackets(parsed.hostname);
+    const likelyPrivateName = hostname.endsWith(".local")
+      || (!hostname.includes(".") && !hostname.includes(":"));
+    return parsed.protocol === "http:"
+      && (isLoopbackHostname(hostname) || isPrivateNetworkHostname(hostname) || likelyPrivateName);
   } catch {
     return false;
   }

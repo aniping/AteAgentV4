@@ -10,6 +10,7 @@ import {
   navigateBrowserTabState,
   normalizeBrowserAddress,
   reloadBrowserTab,
+  shouldUseBrowserPreviewProxy,
   type BrowserAddressError,
   type BrowserTabState,
 } from "@/lib/browser-tab-state";
@@ -78,14 +79,49 @@ export function BrowserViewer({ state, onStateChange }: Props) {
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded">(
     currentUrl ? "loading" : "idle",
   );
+  const [frameSource, setFrameSource] = useState<string | null>(
+    currentUrl && !shouldUseBrowserPreviewProxy(currentUrl) ? currentUrl : null,
+  );
+  const [previewError, setPreviewError] = useState(false);
   const [previewHost, setPreviewHost] = useState("localhost");
   const addressErrorId = useId();
   const addressRef = useRef<HTMLInputElement>(null);
+  const previewRequestRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++previewRequestRef.current;
     setAddress(currentUrl ?? "");
     setAddressError(null);
+    setPreviewError(false);
     setLoadState(currentUrl ? "loading" : "idle");
+    if (!currentUrl) {
+      setFrameSource(null);
+      return;
+    }
+    if (!shouldUseBrowserPreviewProxy(currentUrl)) {
+      setFrameSource(currentUrl);
+      return;
+    }
+
+    setFrameSource(null);
+    const controller = new AbortController();
+    void fetch("/api/browser-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: currentUrl }),
+      signal: controller.signal,
+    }).then(async (response) => {
+      const payload = await response.json() as { previewUrl?: string };
+      if (!response.ok || !payload.previewUrl) throw new Error("browser-preview-unavailable");
+      if (controller.signal.aborted || previewRequestRef.current !== requestId) return;
+      setFrameSource(payload.previewUrl);
+    }).catch(() => {
+      if (controller.signal.aborted || previewRequestRef.current !== requestId) return;
+      setPreviewError(true);
+      setLoadState("idle");
+    });
+
+    return () => controller.abort();
   }, [currentUrl, state.reloadRevision]);
 
   useEffect(() => {
@@ -215,17 +251,23 @@ export function BrowserViewer({ state, onStateChange }: Props) {
 
       <div className="browser-viewport" aria-busy={loadState === "loading"}>
         {currentUrl ? (
-          <>
+          frameSource ? (
             <iframe
-              key={`${currentUrl}:${state.reloadRevision}`}
-              src={currentUrl}
+              key={`${frameSource}:${state.reloadRevision}`}
+              src={frameSource}
               title={t("browser.previewTitle", { url: currentUrl })}
               sandbox="allow-forms allow-same-origin allow-scripts"
               allow="camera 'none'; clipboard-read 'none'; clipboard-write 'none'; geolocation 'none'; microphone 'none'"
               referrerPolicy="strict-origin-when-cross-origin"
               onLoad={() => setLoadState("loaded")}
             />
-          </>
+          ) : (
+            <div className="browser-start-page" role={previewError ? "alert" : "status"}>
+              <div className="browser-start-mark"><GlobeIcon size={30} /></div>
+              <h2>{t(previewError ? "browser.proxyFailed" : "browser.proxyStarting")}</h2>
+              <p>{t(previewError ? "browser.proxyFailedDescription" : "browser.proxyStartingDescription")}</p>
+            </div>
+          )
         ) : (
           <div className="browser-start-page">
             <div className="browser-start-mark"><GlobeIcon size={30} /></div>

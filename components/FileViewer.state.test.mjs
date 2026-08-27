@@ -71,3 +71,11 @@ test("markdown table tokens stay inline despite Tailwind's table utility", () =>
   assert.match(html, /class="token table[ "]/);
   assert.match(cssSource, /span\.token\.table\s*\{[^}]*display:\s*inline;/);
 });
+
+test("markdown preview uses the panel width instead of squeezing technical documents into a prose column", () => {
+  const rule = cssSource.match(/\.markdown-file-preview\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(rule, /width:\s*100%/);
+  assert.match(rule, /max-width:\s*none/);
+  assert.match(rule, /margin:\s*0/);
+  assert.doesNotMatch(rule, /\d+ch|\d+vw/);
+});
