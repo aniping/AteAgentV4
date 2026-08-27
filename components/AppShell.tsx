@@ -6,7 +6,9 @@ import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import { FileViewer } from "./FileViewer";
-import { TabBar, type Tab } from "./TabBar";
+import { BrowserViewer } from "./BrowserViewer";
+import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
+import { getWorkspaceTabDomId, TabBar, type Tab } from "./TabBar";
 import { openFileTab, saveFileViewerState } from "./file-tab-state";
 import { ModelsConfig } from "./ModelsConfig";
 import { SkillsConfig } from "./SkillsConfig";
@@ -45,6 +47,11 @@ import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
+import {
+  createBrowserTabState,
+  getBrowserTabLabel,
+  type BrowserTabState,
+} from "@/lib/browser-tab-state";
 import {
   DEFAULT_SCENE_ID,
   getSceneDefinition,
@@ -365,13 +372,15 @@ export function AppShell() {
     return () => ro.disconnect();
   }, [activeTopPanel, isMobile]);
 
-  // Right panel — file tabs only
-  const [fileTabs, setFileTabs] = useState<Tab[]>([]);
-  const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
+  // Right workspace — file and browser-preview tabs share one visible surface.
+  const [workspaceTabs, setWorkspaceTabs] = useState<Tab[]>([]);
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const appShellRef = useRef<HTMLDivElement>(null);
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const rightPanelContainerRef = useRef<HTMLDivElement>(null);
+  const desktopWorkspaceToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileWorkspaceToggleRef = useRef<HTMLButtonElement>(null);
   const activePanelResizeRef = useRef<ActivePanelResize | null>(null);
   const resizeAnimationFrameRef = useRef<number | null>(null);
   const [resizingPanel, setResizingPanel] = useState<ResizingPanel | null>(null);
@@ -552,8 +561,16 @@ export function AppShell() {
     viewerRevision: number,
     viewerState: FileViewerState,
   ) => {
-    setFileTabs((prev) => saveFileViewerState(prev, tabId, viewerRevision, viewerState));
+    setWorkspaceTabs((prev) => saveFileViewerState(prev, tabId, viewerRevision, viewerState));
   }, []);
+
+  const handleBrowserStateChange = useCallback((tabId: string, browserState: BrowserTabState) => {
+    setWorkspaceTabs((tabs) => tabs.map((tab) => (
+      tab.id === tabId && tab.kind === "browser"
+        ? { ...tab, browserState, label: getBrowserTabLabel(browserState, translate("browser.newTab")) }
+        : tab
+    )));
+  }, [translate]);
 
   // Same @mention format as the chat input's @ autocomplete, so the agent's
   // read tool resolves it the same way (it strips the @ prefix).
@@ -730,10 +747,10 @@ export function AppShell() {
     setSystemPromptLoading(false);
     setActiveTopPanel(null);
     if (currentProject !== newProject) {
-      // File tabs are keyed by absolute path, so tabs opened in the previous
-      // project must not linger. Same-project worktree switches keep them.
-      setFileTabs([]);
-      setActiveFileTabId(null);
+      // Workspace tabs can point at project files or local preview servers, so
+      // tabs from the previous project must not linger across project changes.
+      setWorkspaceTabs([]);
+      setActiveWorkspaceTabId(null);
       setRightPanelOpen(false);
       // Restore the workspace we switched to: its last open session, or keep
       // the default welcome page when none is remembered.
@@ -1009,14 +1026,14 @@ export function AppShell() {
     const sourceSessionId = options?.sourceSessionId;
     const modeHint = options?.modeHint;
     const tabId = `file:${filePath}`;
-    setFileTabs((prev) => openFileTab(prev, {
+    setWorkspaceTabs((prev) => openFileTab(prev, {
       fileName,
       filePath,
       modeHint,
       sourceSessionId,
       tabId,
     }));
-    setActiveFileTabId(tabId);
+    setActiveWorkspaceTabId(tabId);
     setRightPanelOpen(true);
     // On mobile the file panel is full-screen; close the drawer so it shows.
     if (isMobile) setSidebarOpen(false);
@@ -1026,18 +1043,54 @@ export function AppShell() {
     handleOpenFile(filePath, getFileName(filePath), { sourceSessionId: selectedSession?.id ?? null });
   }, [handleOpenFile, selectedSession?.id]);
 
-  const handleCloseFileTab = useCallback((tabId: string) => {
-    setFileTabs((prev) => {
-      const next = prev.filter((t) => t.id !== tabId);
-      if (next.length === 0) setRightPanelOpen(false);
-      return next;
+  const handleOpenBrowser = useCallback(() => {
+    const tabId = typeof crypto.randomUUID === "function"
+      ? `browser:${crypto.randomUUID()}`
+      : `browser:${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const browserState = createBrowserTabState();
+    setWorkspaceTabs((tabs) => [...tabs, {
+      kind: "browser",
+      id: tabId,
+      label: translate("browser.newTab"),
+      browserState,
+    }]);
+    setActiveWorkspaceTabId(tabId);
+    setRightPanelOpen(true);
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile, translate]);
+
+  const handleShowFileExplorer = useCallback(() => {
+    setRightPanelOpen(false);
+    setSidebarOpen(true);
+    requestAnimationFrame(() => {
+      const explorerToggle = sidebarContainerRef.current
+        ?.querySelector<HTMLButtonElement>('[data-file-explorer-toggle="true"]');
+      if (!explorerToggle) return;
+      if (explorerToggle.getAttribute("aria-expanded") !== "true") explorerToggle.click();
+      explorerToggle.focus();
     });
-    setActiveFileTabId((cur) => {
+  }, []);
+
+  const handleCloseWorkspaceTab = useCallback((tabId: string) => {
+    const closedIndex = workspaceTabs.findIndex((tab) => tab.id === tabId);
+    if (closedIndex === -1) return;
+    const remaining = workspaceTabs.filter((tab) => tab.id !== tabId);
+    setWorkspaceTabs(remaining);
+    setActiveWorkspaceTabId((cur) => {
       if (cur !== tabId) return cur;
-      const remaining = fileTabs.filter((t) => t.id !== tabId);
-      return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+      return remaining[Math.min(closedIndex, remaining.length - 1)]?.id ?? null;
     });
-  }, [fileTabs]);
+    if (remaining.length === 0) setRightPanelOpen(false);
+  }, [workspaceTabs]);
+
+  const focusWorkspaceToggle = useCallback(() => {
+    (isMobile ? mobileWorkspaceToggleRef : desktopWorkspaceToggleRef).current?.focus();
+  }, [isMobile]);
+
+  const handleCloseWorkspacePanel = useCallback(() => {
+    setRightPanelOpen(false);
+    requestAnimationFrame(focusWorkspaceToggle);
+  }, [focusWorkspaceToggle]);
 
   const handleViewFullHistory = useCallback(() => {
     if (!selectedSession) return;
@@ -1106,7 +1159,7 @@ export function AppShell() {
     }
   }, [projectTrustBusy, projectTrustCwd]);
 
-  const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
+  const activeWorkspaceTab = workspaceTabs.find((tab) => tab.id === activeWorkspaceTabId) ?? null;
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
   const effectiveSceneId = selectedSession?.sceneId ?? (selectedSession ? undefined : activeSceneId);
   const titleSceneId = selectedSession ? selectedSession.sceneId : activeSceneId;
@@ -1749,15 +1802,16 @@ export function AppShell() {
     const covered = mobile && mobileToolbarMoreOpen;
     return (
       <button
+        ref={mobile ? mobileWorkspaceToggleRef : desktopWorkspaceToggleRef}
         type="button"
         onClick={handleRightPanelToggle}
         disabled={covered}
         tabIndex={covered ? -1 : undefined}
-        aria-controls="file-panel"
+        aria-controls="workspace-panel"
         aria-expanded={rightPanelOpen}
         aria-hidden={covered ? true : undefined}
-        title={rightPanelOpen ? translate("files.hidePanel") : translate("files.showPanel")}
-        aria-label={rightPanelOpen ? translate("files.hidePanel") : translate("files.showPanel")}
+        title={rightPanelOpen ? translate("workspacePanel.hide") : translate("workspacePanel.show")}
+        aria-label={rightPanelOpen ? translate("workspacePanel.hide") : translate("workspacePanel.show")}
         data-mobile-toolbar-file={mobile ? "true" : undefined}
         style={{
           marginLeft: !mobile && !sessionStats && !contextUsage ? "auto" : 0,
@@ -2382,15 +2436,18 @@ export function AppShell() {
       {rightPanelOpen && (
         <PanelResizeHandle
           side="right"
-          label={translate("files.resizePanel")}
+          label={translate("workspacePanel.resize")}
           onPointerDown={handlePanelResizeStart}
         />
       )}
 
-      {/* Right panel: file viewer — always mounted, width animated via CSS */}
+      {/* Right workspace: file and browser previews share a tabbed surface. */}
       <div
+        id="workspace-panel"
         ref={rightPanelContainerRef}
         className={`right-panel-container${rightPanelOpen ? " right-panel-open" : " right-panel-closed"}`}
+        aria-hidden={!rightPanelOpen}
+        inert={rightPanelOpen ? undefined : true}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -2398,39 +2455,45 @@ export function AppShell() {
           background: "var(--bg)",
         }}
       >
-        {/* Right panel tab bar */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          flexShrink: 0,
-          height: "calc(36px + env(safe-area-inset-top))",
-          paddingTop: "env(safe-area-inset-top)",
-          background: "var(--bg-panel)",
-          borderBottom: "1px solid var(--border)",
-        }}>
-          <div style={{ flex: 1, overflow: "hidden" }}>
+        {/* Right workspace tab bar */}
+        <div className="workspace-panel-header">
+          {workspaceTabs.length > 0 ? (
             <TabBar
-              tabs={fileTabs}
-              activeTabId={activeFileTabId ?? ""}
-              onSelectTab={setActiveFileTabId}
-              onCloseTab={handleCloseFileTab}
+              tabs={workspaceTabs}
+              activeTabId={activeWorkspaceTabId ?? ""}
+              onSelectTab={setActiveWorkspaceTabId}
+              onCloseTab={handleCloseWorkspaceTab}
+              onTabsEmpty={focusWorkspaceToggle}
             />
-          </div>
+          ) : (
+            <div className="workspace-panel-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <path d="M9 4v16M9 9h12" />
+              </svg>
+              <span>{translate("workspacePanel.title")}</span>
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => setRightPanelOpen(false)}
-            aria-controls="file-panel"
+            className="workspace-panel-action"
+            onClick={handleOpenBrowser}
+            title={translate("workspacePanel.newBrowser")}
+            aria-label={translate("workspacePanel.newBrowser")}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="12" r="8" />
+              <path d="M3 12h16M11 4c2.1 2.2 3.1 4.9 3.1 8S13.1 17.8 11 20M19 5v6M16 8h6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="workspace-panel-action"
+            onClick={handleCloseWorkspacePanel}
+            aria-controls="workspace-panel"
             aria-expanded={rightPanelOpen}
-            title={translate("files.hidePanel")}
-            aria-label={translate("files.hidePanel")}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: TOP_BAR_ICON_BUTTON_SIZE, height: TOP_BAR_ICON_BUTTON_SIZE, padding: 0,
-              background: "var(--bg-selected)", border: "none", borderLeft: "1px solid var(--border)",
-              color: "var(--text)", cursor: "pointer", flexShrink: 0, transition: "color 0.12s",
-            }}
-            onMouseEnter={(event) => { event.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(event) => { event.currentTarget.style.color = "var(--text)"; }}
+            title={translate("workspacePanel.hide")}
+            aria-label={translate("workspacePanel.hide")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
@@ -2438,21 +2501,42 @@ export function AppShell() {
           </button>
         </div>
 
-        {/* Only the active viewer is mounted. Lightweight per-tab state is restored on activation. */}
-        <div style={{ flex: 1, overflow: "hidden", paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {activeFileTab?.filePath ? (
+        {/* Mount one file viewer, but retain browser frames while the panel is open. */}
+        <div
+          id="workspace-panel-content"
+          className="workspace-panel-content"
+          role="tabpanel"
+          aria-label={activeWorkspaceTab ? undefined : translate("workspacePanel.title")}
+          aria-labelledby={activeWorkspaceTab ? getWorkspaceTabDomId(activeWorkspaceTab.id) : undefined}
+        >
+          {rightPanelOpen && workspaceTabs.map((tab) => {
+            if (tab.kind !== "browser") return null;
+            return (
+              <div
+                key={tab.id}
+                className="workspace-browser-tab-panel"
+                hidden={tab.id !== activeWorkspaceTabId}
+              >
+                <BrowserViewer
+                  state={tab.browserState}
+                  onStateChange={(browserState) => handleBrowserStateChange(tab.id, browserState)}
+                />
+              </div>
+            );
+          })}
+          {activeWorkspaceTab?.kind === "file" ? (
             <FileViewer
-              key={`${activeFileTab.id}:${activeFileTab.viewerRevision ?? 0}`}
-              filePath={activeFileTab.filePath}
+              key={`${activeWorkspaceTab.id}:${activeWorkspaceTab.viewerRevision ?? 0}`}
+              filePath={activeWorkspaceTab.filePath}
               cwd={activeCwd ?? undefined}
-              sourceSessionId={activeFileTab.sourceSessionId}
+              sourceSessionId={activeWorkspaceTab.sourceSessionId}
               gitRefreshKey={explorerRefreshKey}
-              initialDisplayMode={activeFileTab.initialDisplayMode}
-              initialState={activeFileTab.viewerState}
+              initialDisplayMode={activeWorkspaceTab.initialDisplayMode}
+              initialState={activeWorkspaceTab.viewerState}
               watchEnabled={rightPanelOpen}
               onStateChange={(viewerState) => handleFileViewerStateChange(
-                activeFileTab.id,
-                activeFileTab.viewerRevision ?? 0,
+                activeWorkspaceTab.id,
+                activeWorkspaceTab.viewerRevision ?? 0,
                 viewerState,
               )}
               onMentionLines={rightPanelOpen ? handleFileLineMention : undefined}
@@ -2460,13 +2544,13 @@ export function AppShell() {
               onOpenFile={(filePath) => handleOpenFile(
                 filePath,
                 getFileName(filePath),
-                { sourceSessionId: activeFileTab.sourceSessionId },
+                { sourceSessionId: activeWorkspaceTab.sourceSessionId },
               )}
             />
+          ) : activeWorkspaceTab?.kind === "browser" ? (
+            null
           ) : (
-            <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
-               {translate("files.noneOpen")}
-            </div>
+            <WorkspaceEmptyState onOpenBrowser={handleOpenBrowser} onShowFiles={handleShowFileExplorer} />
           )}
         </div>
       </div>

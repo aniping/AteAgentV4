@@ -13,6 +13,7 @@ export function openFileTab(tabs: Tab[], input: OpenFileTabInput): Tab[] {
   const existing = tabs.find((tab) => tab.id === input.tabId);
   if (!existing) {
     return [...tabs, {
+      kind: "file",
       id: input.tabId,
       label: input.fileName,
       filePath: input.filePath,
@@ -27,6 +28,7 @@ export function openFileTab(tabs: Tab[], input: OpenFileTabInput): Tab[] {
       viewerRevision: 0,
     }];
   }
+  if (existing.kind !== "file") return tabs;
 
   const sourceChanged = Boolean(
     input.sourceSessionId && existing.sourceSessionId !== input.sourceSessionId,
@@ -35,8 +37,8 @@ export function openFileTab(tabs: Tab[], input: OpenFileTabInput): Tab[] {
   if (sourceUnchanged && !input.modeHint) return tabs;
 
   return tabs.map((tab) => {
-    if (tab.id !== input.tabId) return tab;
-    const next: Tab = { ...tab };
+    if (tab.id !== input.tabId || tab.kind !== "file") return tab;
+    const next = { ...tab };
     if (sourceChanged) next.sourceSessionId = input.sourceSessionId;
     if (input.modeHint) {
       next.initialDisplayMode = input.modeHint;
@@ -61,9 +63,10 @@ export function saveFileViewerState(
   viewerState: FileViewerState,
 ): Tab[] {
   const index = tabs.findIndex((tab) => tab.id === tabId);
-  if (index === -1 || (tabs[index].viewerRevision ?? 0) !== viewerRevision) return tabs;
+  const tab = tabs[index];
+  if (index === -1 || !tab || tab.kind !== "file" || (tab.viewerRevision ?? 0) !== viewerRevision) return tabs;
 
   const next = [...tabs];
-  next[index] = { ...next[index], viewerState };
+  next[index] = { ...tab, viewerState };
   return next;
 }

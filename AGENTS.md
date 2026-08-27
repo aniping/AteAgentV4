@@ -112,8 +112,10 @@ components/
   SkillsConfig.tsx    modal for loaded/search/installable skills
   FileExplorer.tsx    file tree inside sidebar
   FileIcons.tsx       file icon helpers
-  FileViewer.tsx      file content in a tab
-  TabBar.tsx          tab bar (Chat + open file tabs)
+  FileViewer.tsx      file content in a workspace tab
+  BrowserViewer.tsx   sandboxed HTTP(S) web preview in a workspace tab
+  WorkspaceEmptyState.tsx  right-workspace launch actions
+  TabBar.tsx          file/browser workspace tab bar
 
 hooks/
   useAgentSession.ts  messages + streaming + SSE + fork/navigate/reconciliation logic
@@ -213,6 +215,12 @@ Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `au
 
 ### Exported session HTML
 - `/api/sessions/[id]/export` delegates to pi's export helper, then patches recursive tree helpers in the generated HTML to iterative versions so very deep linear sessions do not overflow the browser call stack.
+
+### Browser preview boundary
+- The right-side browser is a sandboxed iframe preview, not an agent-controlled or isolated browser session. It runs in the current browser context, so target-origin cookies/storage may be reused according to the browser's third-party storage policy; it cannot reliably observe navigation performed inside a cross-origin frame.
+- Browser addresses are admitted only through `normalizeBrowserAddress()` in `lib/browser-tab-state.ts`: allow HTTP(S), reject embedded credentials, and prevent recursively framing the current app. Keep the root `frame-ancestors 'none'` / `X-Frame-Options: DENY` response headers in sync with that same-origin sandbox boundary.
+- Many sites reject iframe embedding through CSP or `X-Frame-Options`; `BrowserViewer` must therefore keep its external-browser action visible instead of relying on iframe `onError` detection.
+- Do not add a general URL proxy to bypass iframe restrictions. It would create an SSRF and trusted-LAN access boundary; a future shared agent browser requires an isolated Playwright/CDP session with its own authentication, network policy, and lifecycle.
 
 ## Pi Session File Format
 

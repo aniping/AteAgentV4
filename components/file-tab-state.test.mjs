@@ -4,6 +4,7 @@ import test from "node:test";
 import { openFileTab, saveFileViewerState } from "./file-tab-state.ts";
 
 const tabA = {
+  kind: "file",
   id: "file:/repo/a.ts",
   label: "a.ts",
   filePath: "/repo/a.ts",
@@ -17,6 +18,7 @@ const tabA = {
 };
 
 const tabB = {
+  kind: "file",
   id: "file:/repo/b.ts",
   label: "b.ts",
   filePath: "/repo/b.ts",
