@@ -11,6 +11,7 @@ import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
 import { BrandMark } from "./BrandMark";
+import { SceneCapabilityLaunchpad } from "./SceneCapabilityLaunchpad";
 import { useI18n } from "@/hooks/useI18n";
 import { useAgentSession, type AgentPhase, type NoticeItem } from "@/hooks/useAgentSession";
 import { useDragDrop } from "@/hooks/useDragDrop";
@@ -37,6 +38,7 @@ interface Props {
   newSessionCwd: string | null;
   newSessionDraftKey: string | null;
   sceneId?: SceneId;
+  onSceneChange?: (sceneId: SceneId) => void;
   onAgentEnd?: () => void;
   onAttentionNeeded?: (request: BlockingExtensionUiRequest) => void;
   onSessionCreated?: (session: SessionInfo, sourceDraftKey: string) => void;
@@ -192,7 +194,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
   );
 }
 
-export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionDraftKey, sceneId, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
+export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionDraftKey, sceneId, onSceneChange, onAgentEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemPromptLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onContextUsageChange, onOpenFile, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio }: Props) {
   const { locale, t } = useI18n();
   const isMobile = useIsMobile();
 
@@ -364,6 +366,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
   }, [messages.length]);
 
   const isEmptyNew = isNew && messages.length === 0 && !streamState.isStreaming && !sessionBusy;
+  const useCapabilityLaunchpad = !isMobile;
   const scene = sceneId ? getSceneDefinition(sceneId) : undefined;
   const hasStreamingContent = Boolean(streamState.streamingMessage?.content.length);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
@@ -515,6 +518,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
       onAudioUnlock={unlockAudio}
       draftKey={session?.id ?? newSessionDraftKey ?? undefined}
       cwd={session?.cwd ?? newSessionCwd}
+      wideLayout={useCapabilityLaunchpad && isEmptyNew}
     />
   );
 
@@ -606,17 +610,17 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
       </div>
 
       {isEmptyNew ? (
-        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
-          <div className="w-full max-w-[820px]">
+        <div className={`flex flex-1 flex-col items-center justify-center px-4 py-8${useCapabilityLaunchpad ? " scene-capability-empty" : " overflow-y-auto"}`}>
+          <div className={useCapabilityLaunchpad ? "scene-capability-shell" : "w-full max-w-[820px]"}>
             <div
-              className="mb-3"
+              className={useCapabilityLaunchpad ? "scene-capability-brand" : "mb-3"}
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: 12,
-                marginLeft: 16,
-                marginRight: isMobile ? 16 : 52,
+                marginLeft: useCapabilityLaunchpad ? 0 : 16,
+                marginRight: useCapabilityLaunchpad ? 0 : (isMobile ? 16 : 52),
                 paddingTop: 6,
                 paddingBottom: 2,
                 fontFamily: "var(--font-mono)",
@@ -638,7 +642,13 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
                 </span>
               </div>
             </div>
-            {scene && (
+            {scene && useCapabilityLaunchpad && onSceneChange ? (
+              <SceneCapabilityLaunchpad
+                activeSceneId={scene.id}
+                locale={locale}
+                onSceneChange={onSceneChange}
+              />
+            ) : scene ? (
               <div
                 className="scene-launch-card"
                 style={{ "--scene-accent": scene.accent } as React.CSSProperties}
@@ -649,7 +659,7 @@ export function ChatWindow({ session, sessionRunning, newSessionCwd, newSessionD
                   <div className="scene-launch-description">{getSceneDescription(scene, locale)}</div>
                 </div>
               </div>
-            )}
+            ) : null}
             {chatInputElement}
             <ExtensionStatusBar statuses={extensionStatuses} widgets={extensionWidgets} />
           </div>

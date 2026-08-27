@@ -911,7 +911,7 @@ function DocumentViewer({ filePath, cwd, sourceSessionId, watchEnabled = true }:
             src={previewUrl}
             sandbox={isPdf ? undefined : "allow-same-origin"}
             title={t("i18n.previewFile", { file: getFileName(filePath) })}
-            style={{ width: "100%", height: "100%", border: "none", background: isPdf ? "var(--bg)" : "#eef1f5" }}
+            style={{ width: "100%", height: "100%", border: "none", background: isPdf ? "var(--bg)" : "var(--file-preview-bg, #eef1f5)" }}
           />
         )}
       </div>

@@ -80,6 +80,8 @@ interface Props {
   draftKey?: string;
   /** Session working directory — enables the @ file autocomplete menu */
   cwd?: string | null;
+  /** Lets a purpose-built empty state align the composer to its wider content rail. */
+  wideLayout?: boolean;
 }
 
 export interface ChatInputHandle {
@@ -392,6 +394,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onPromptWithStreamingBehavior,
   draftKey,
   cwd,
+  wideLayout = false,
 }: Props, ref) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
@@ -1366,7 +1369,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
         flexShrink: 0,
         background: "transparent",
         padding: "0 16px 8px",
-        paddingRight: isMobile ? 16 : 52, // desktop: 16px base + 36px for ChatMinimap alignment
+        paddingRight: isMobile || wideLayout ? 16 : 52, // wide empty states do not render the ChatMinimap
       }}
     >
       {/* Hidden file input */}
@@ -1382,7 +1385,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           e.target.value = "";
         }}
       />
-      <div style={{ maxWidth: 820, margin: "0 auto" }}>
+      <div style={{ maxWidth: wideLayout ? "none" : 820, margin: "0 auto" }}>
         <ModelErrorBanner error={modelError} />
         <ModelScopeWarningBanner warnings={modelScopeWarnings} />
         {/* Queued steering / follow-up messages (delivered by pi on upcoming turns) */}
@@ -1874,7 +1877,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               display: "flex",
               gap: 8,
               alignItems: "center",
-              background: "var(--bg)",
+              background: "var(--input-bg, var(--bg))",
               border: `1px solid ${bashMode ? "var(--tool-bg)" : isStreaming && (onSteer || onFollowUp)
                 ? "rgba(234,179,8,0.4)"
                 : "color-mix(in srgb, var(--border) 70%, transparent)"}`,

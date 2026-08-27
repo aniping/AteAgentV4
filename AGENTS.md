@@ -238,6 +238,7 @@ Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 --bg --bg-panel --bg-hover --bg-selected --border
 --text --text-muted --text-dim
 --accent --user-bg --tool-bg
+--app-chrome-surface --input-bg --file-preview-bg
 --font-mono
 ```
 
