@@ -9,16 +9,23 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { request as httpsRequest, type RequestOptions } from "node:https";
 import { BlockList, isIP, Socket } from "node:net";
+import { networkInterfaces } from "node:os";
 import type { Duplex } from "node:stream";
 import { connect as tlsConnect } from "node:tls";
 
-const LOCAL_ADDRESSES = new BlockList();
-LOCAL_ADDRESSES.addSubnet("0.0.0.0", 32, "ipv4");
-LOCAL_ADDRESSES.addSubnet("127.0.0.0", 8, "ipv4");
-LOCAL_ADDRESSES.addAddress("::", "ipv6");
-LOCAL_ADDRESSES.addAddress("::1", "ipv6");
+const LOOPBACK_ADDRESSES = new BlockList();
+LOOPBACK_ADDRESSES.addSubnet("0.0.0.0", 32, "ipv4");
+LOOPBACK_ADDRESSES.addSubnet("127.0.0.0", 8, "ipv4");
+LOOPBACK_ADDRESSES.addAddress("::", "ipv6");
+LOOPBACK_ADDRESSES.addAddress("::1", "ipv6");
+
+const PRIVATE_NETWORK_ADDRESSES = new BlockList();
+PRIVATE_NETWORK_ADDRESSES.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE_NETWORK_ADDRESSES.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE_NETWORK_ADDRESSES.addSubnet("192.168.0.0", 16, "ipv4");
+PRIVATE_NETWORK_ADDRESSES.addSubnet("fc00::", 7, "ipv6");
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -59,12 +66,16 @@ export class BrowserPreviewProxyError extends Error {
 export interface BrowserPreviewProxyOptions {
   parentOrigin: string;
   forbiddenOrigins?: string[];
+  addressProvider?: BrowserPreviewAddressProvider;
 }
+
+export type BrowserPreviewAddressProvider = () => readonly string[];
 
 interface ResolvedTarget {
   url: URL;
   address: string;
   family: 4 | 6;
+  requiresAddressOwnership: boolean;
 }
 
 interface ManagedBrowserPreviewProxy {
@@ -95,21 +106,73 @@ function withoutIpv6Brackets(hostname: string): string {
   return hostname.toLowerCase().replace(/^\[|\]$/g, "");
 }
 
-function isLocalAddress(address: string, family = isIP(address)): boolean {
-  if (family === 4) return LOCAL_ADDRESSES.check(address, "ipv4");
+function systemInterfaceAddresses(): readonly string[] {
+  return Object.values(networkInterfaces())
+    .flatMap((addresses) => addresses ?? [])
+    .map(({ address }) => address);
+}
+
+export function isBrowserPreviewAddressAllowed(
+  address: string,
+  allowPrivateNetwork = true,
+  family = isIP(address),
+): boolean {
+  if (family === 4) {
+    return LOOPBACK_ADDRESSES.check(address, "ipv4")
+      || (allowPrivateNetwork && PRIVATE_NETWORK_ADDRESSES.check(address, "ipv4"));
+  }
   if (family !== 6) return false;
 
   const mappedIpv4 = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i)?.[1];
   if (mappedIpv4 && isIP(mappedIpv4) === 4) {
-    return LOCAL_ADDRESSES.check(mappedIpv4, "ipv4");
+    return isBrowserPreviewAddressAllowed(mappedIpv4, allowPrivateNetwork, 4);
   }
-  return LOCAL_ADDRESSES.check(address, "ipv6");
+  return LOOPBACK_ADDRESSES.check(address, "ipv6")
+    || (allowPrivateNetwork && PRIVATE_NETWORK_ADDRESSES.check(address, "ipv6"));
 }
 
 function connectionAddress(address: string): string {
   if (address === "0.0.0.0") return "127.0.0.1";
   if (address === "::") return "::1";
   return address;
+}
+
+function isLoopbackAddress(address: string, family = isIP(address)): boolean {
+  return isBrowserPreviewAddressAllowed(address, false, family);
+}
+
+function addressProviderOwns(
+  addressProvider: BrowserPreviewAddressProvider,
+  address: string,
+  family: 4 | 6,
+): boolean {
+  if (!PRIVATE_NETWORK_ADDRESSES.check(address, family === 4 ? "ipv4" : "ipv6")) {
+    return false;
+  }
+
+  let addresses: readonly string[];
+  try {
+    addresses = addressProvider();
+  } catch {
+    return false;
+  }
+
+  const exactAddress = new BlockList();
+  exactAddress.addAddress(address, family === 4 ? "ipv4" : "ipv6");
+  return addresses.some((candidate) => {
+    const normalized = withoutIpv6Brackets(candidate);
+    const candidateFamily = isIP(normalized);
+    return candidateFamily === family
+      && exactAddress.check(normalized, family === 4 ? "ipv4" : "ipv6");
+  });
+}
+
+function isResolvedTargetStillAllowed(
+  resolved: ResolvedTarget,
+  addressProvider: BrowserPreviewAddressProvider,
+): boolean {
+  return !resolved.requiresAddressOwnership
+    || addressProviderOwns(addressProvider, resolved.address, resolved.family);
 }
 
 function endpointKey(address: string, port: string | number): string {
@@ -127,7 +190,11 @@ function browserHostForParent(parent: ResolvedTarget): string {
   return parent.family === 6 ? `[${hostname}]` : hostname;
 }
 
-async function resolveLocalTarget(rawTarget: string): Promise<ResolvedTarget> {
+async function resolveLocalTarget(
+  rawTarget: string,
+  allowPrivateNetwork = false,
+  addressProvider: BrowserPreviewAddressProvider = systemInterfaceAddresses,
+): Promise<ResolvedTarget> {
   let url: URL;
   try {
     url = new URL(rawTarget);
@@ -145,18 +212,24 @@ async function resolveLocalTarget(rawTarget: string): Promise<ResolvedTarget> {
   const hostname = withoutIpv6Brackets(url.hostname);
   const literalFamily = isIP(hostname);
   if (literalFamily) {
-    if (!isLocalAddress(hostname, literalFamily)) {
-      throw new BrowserPreviewProxyError("target-not-local", "Only loopback services can use the compatibility proxy");
+    if (!isBrowserPreviewAddressAllowed(hostname, allowPrivateNetwork, literalFamily)) {
+      throw new BrowserPreviewProxyError("target-not-local", "Only loopback and private-network services can use the compatibility proxy");
+    }
+    const address = connectionAddress(hostname);
+    const requiresAddressOwnership = !isLoopbackAddress(address, literalFamily);
+    if (requiresAddressOwnership && !addressProviderOwns(addressProvider, address, literalFamily as 4 | 6)) {
+      throw new BrowserPreviewProxyError("target-not-local", "The private service address is not assigned to this machine");
     }
     return {
       url,
-      address: connectionAddress(hostname),
+      address,
       family: literalFamily as 4 | 6,
+      requiresAddressOwnership,
     };
   }
 
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
-    return { url, address: "127.0.0.1", family: 4 };
+    return { url, address: "127.0.0.1", family: 4, requiresAddressOwnership: false };
   }
 
   let addresses: LookupAddress[];
@@ -169,15 +242,21 @@ async function resolveLocalTarget(rawTarget: string): Promise<ResolvedTarget> {
   if (addresses.length === 0) {
     throw new BrowserPreviewProxyError("target-unresolved", "The local service hostname did not resolve to an address");
   }
-  if (addresses.some(({ address, family }) => !isLocalAddress(address, family))) {
-    throw new BrowserPreviewProxyError("target-not-local", "The compatibility proxy refuses hostnames that resolve outside loopback");
+  if (addresses.some(({ address, family }) => {
+    if (!isBrowserPreviewAddressAllowed(address, allowPrivateNetwork, family)) return true;
+    return !isLoopbackAddress(address, family)
+      && !addressProviderOwns(addressProvider, address, family as 4 | 6);
+  })) {
+    throw new BrowserPreviewProxyError("target-not-local", "The compatibility proxy refuses hostnames that resolve outside loopback or private networks");
   }
 
   const selected = addresses.find(({ family }) => family === 4) ?? addresses[0];
+  const address = connectionAddress(selected.address);
   return {
     url,
-    address: connectionAddress(selected.address),
+    address,
     family: selected.family as 4 | 6,
+    requiresAddressOwnership: !isLoopbackAddress(address, selected.family),
   };
 }
 
@@ -379,6 +458,7 @@ function isPreviewRequestAllowed(request: IncomingMessage, previewOrigin: string
 
 function proxyHttpRequest(
   resolved: ResolvedTarget,
+  addressProvider: BrowserPreviewAddressProvider,
   previewOrigin: string,
   parentOrigin: string,
   request: IncomingMessage,
@@ -394,11 +474,16 @@ function proxyHttpRequest(
     sendHttpError(response, 400, "Invalid preview request path.");
     return;
   }
+  if (!isResolvedTargetStillAllowed(resolved, addressProvider)) {
+    sendHttpError(response, 403, "The private service address is no longer assigned to this machine.");
+    return;
+  }
 
-  const requestOptions = {
+  const requestOptions: RequestOptions = {
     protocol: resolved.url.protocol,
     hostname: resolved.address,
     family: resolved.family,
+    localAddress: resolved.requiresAddressOwnership ? resolved.address : undefined,
     port: resolved.url.port || (resolved.url.protocol === "https:" ? 443 : 80),
     method: request.method,
     path: `${targetUrl.pathname}${targetUrl.search}`,
@@ -468,6 +553,7 @@ function sendSocketError(
 
 function proxyWebSocket(
   resolved: ResolvedTarget,
+  addressProvider: BrowserPreviewAddressProvider,
   previewOrigin: string,
   request: IncomingMessage,
   clientSocket: Duplex,
@@ -482,15 +568,24 @@ function proxyWebSocket(
     sendSocketError(clientSocket, "Invalid preview WebSocket path.", 400, "Bad Request");
     return;
   }
+  if (!isResolvedTargetStillAllowed(resolved, addressProvider)) {
+    sendSocketError(clientSocket, "The private service address is no longer assigned to this machine.", 403, "Forbidden");
+    return;
+  }
 
   const port = targetPort(resolved.url);
+  const transportSocket = new Socket().connect({
+    host: resolved.address,
+    port,
+    family: resolved.family,
+    localAddress: resolved.requiresAddressOwnership ? resolved.address : undefined,
+  });
   const upstreamSocket = resolved.url.protocol === "https:"
     ? tlsConnect({
-      host: resolved.address,
-      port,
+      socket: transportSocket,
       servername: isIP(withoutIpv6Brackets(resolved.url.hostname)) ? undefined : withoutIpv6Brackets(resolved.url.hostname),
     })
-    : new Socket().connect({ host: resolved.address, port, family: resolved.family });
+    : transportSocket;
   const connectedEvent = resolved.url.protocol === "https:" ? "secureConnect" : "connect";
 
   upstreamSocket.once(connectedEvent, () => {
@@ -509,6 +604,7 @@ async function startProxy(
   registryKey: string,
   resolved: ResolvedTarget,
   parent: ResolvedTarget,
+  addressProvider: BrowserPreviewAddressProvider,
 ): Promise<ManagedBrowserPreviewProxy> {
   let previewOrigin = "";
   let listenerEndpoint = "";
@@ -544,7 +640,7 @@ async function startProxy(
       sendHttpError(response, 421, "This request does not belong to this browser preview.");
       return;
     }
-    proxyHttpRequest(resolved, previewOrigin, parent.url.origin, request, response);
+    proxyHttpRequest(resolved, addressProvider, previewOrigin, parent.url.origin, request, response);
   });
   server.on("upgrade", (request, socket, head) => {
     touch();
@@ -552,7 +648,7 @@ async function startProxy(
       sendSocketError(socket, "This request does not belong to this browser preview.", 421, "Misdirected Request");
       return;
     }
-    proxyWebSocket(resolved, previewOrigin, request, socket, head);
+    proxyWebSocket(resolved, addressProvider, previewOrigin, request, socket, head);
   });
   server.on("connection", (socket) => {
     sockets.add(socket);
@@ -615,8 +711,12 @@ export async function createBrowserPreviewUrl(
   } catch (error) {
     throw new BrowserPreviewProxyError("invalid-target", "Invalid browser preview parent origin", { cause: error });
   }
-  const parent = await resolveLocalTarget(parentOrigin);
-  const resolved = await resolveLocalTarget(rawTarget);
+  const addressProvider = options.addressProvider ?? systemInterfaceAddresses;
+  const parent = await resolveLocalTarget(parentOrigin, false, addressProvider);
+  const resolved = await resolveLocalTarget(rawTarget, true, addressProvider);
+  if (resolved.requiresAddressOwnership && targetPort(resolved.url) === targetPort(parent.url)) {
+    throw new BrowserPreviewProxyError("recursive-target", "A private-address alias of the Wireless ATE Agent service cannot be previewed inside itself");
+  }
   if (proxyEndpoints.has(endpointKey(resolved.address, targetPort(resolved.url)))) {
     throw new BrowserPreviewProxyError("recursive-target", "A browser preview proxy cannot proxy an active preview listener");
   }
@@ -633,7 +733,7 @@ export async function createBrowserPreviewUrl(
   const registryKey = `${parent.url.origin}\0${resolved.url.origin}`;
   let proxyPromise = proxyRegistry.get(registryKey);
   if (!proxyPromise) {
-    proxyPromise = startProxy(registryKey, resolved, parent);
+    proxyPromise = startProxy(registryKey, resolved, parent, addressProvider);
     proxyRegistry.set(registryKey, proxyPromise);
     void proxyPromise.catch(() => proxyRegistry.delete(registryKey));
   }
