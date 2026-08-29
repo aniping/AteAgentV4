@@ -10,6 +10,7 @@ import {
   navigateBrowserTabState,
   normalizeBrowserAddress,
   reloadBrowserTab,
+  shouldFallbackToDirectBrowserFrame,
   shouldUseBrowserPreviewProxy,
   type BrowserAddressError,
   type BrowserTabState,
@@ -111,9 +112,13 @@ export function BrowserViewer({ state, onStateChange }: Props) {
       body: JSON.stringify({ url: currentUrl }),
       signal: controller.signal,
     }).then(async (response) => {
-      const payload = await response.json() as { previewUrl?: string };
-      if (!response.ok || !payload.previewUrl) throw new Error("browser-preview-unavailable");
+      const payload = await response.json() as { previewUrl?: string; error?: unknown };
       if (controller.signal.aborted || previewRequestRef.current !== requestId) return;
+      if (shouldFallbackToDirectBrowserFrame(response.status, payload.error)) {
+        setFrameSource(currentUrl);
+        return;
+      }
+      if (!response.ok || !payload.previewUrl) throw new Error("browser-preview-unavailable");
       setFrameSource(payload.previewUrl);
     }).catch(() => {
       if (controller.signal.aborted || previewRequestRef.current !== requestId) return;

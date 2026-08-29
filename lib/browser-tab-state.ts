@@ -169,6 +169,17 @@ export function isLocalBrowserUrl(url: string | null): boolean {
   }
 }
 
+const DIRECT_FRAME_FALLBACK_RESPONSES = [
+  { status: 403, error: "target-not-local" },
+  { status: 502, error: "target-unresolved" },
+] as const;
+
+export function shouldFallbackToDirectBrowserFrame(status: number, error: unknown): boolean {
+  return DIRECT_FRAME_FALLBACK_RESPONSES.some(
+    (candidate) => candidate.status === status && candidate.error === error,
+  );
+}
+
 export function shouldUseBrowserPreviewProxy(url: string | null): boolean {
   if (!url) return false;
   try {

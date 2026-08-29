@@ -25,6 +25,24 @@ test("local services are loaded through the preview proxy instead of framed dire
   assert.doesNotMatch(viewerSource, /src=\{currentUrl\}/);
 });
 
+test("safe compatibility-proxy misses fall back to direct framing", () => {
+  assert.match(
+    viewerSource,
+    /shouldFallbackToDirectBrowserFrame\(response\.status, payload\.error\)/,
+  );
+  assert.match(
+    viewerSource,
+    /shouldFallbackToDirectBrowserFrame\(response\.status, payload\.error\)[\s\S]*?setFrameSource\(currentUrl\)/,
+  );
+  const staleResponseGuard = viewerSource.indexOf(
+    "controller.signal.aborted || previewRequestRef.current !== requestId",
+  );
+  const directFallback = viewerSource.indexOf(
+    "shouldFallbackToDirectBrowserFrame(response.status, payload.error)",
+  );
+  assert.ok(staleResponseGuard >= 0 && staleResponseGuard < directFallback);
+});
+
 test("stale preview bootstrap responses cannot replace a newer navigation", () => {
   assert.match(viewerSource, /const requestId = \+\+previewRequestRef\.current/);
   assert.match(viewerSource, /controller\.signal\.aborted \|\| previewRequestRef\.current !== requestId/);
