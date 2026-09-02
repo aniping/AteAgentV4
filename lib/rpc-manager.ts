@@ -17,7 +17,11 @@ import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { isModelAllowedByConfig, type ModelsConfig } from "./models-config";
 import { readModelsConfig } from "./models-config-store";
-import { preferBundledSceneMcpAdapter, prepareBundledMcpAdapter } from "./mcp-adapter";
+import {
+  preferBundledSceneMcpAdapter,
+  prepareBreakhubMcpServerState,
+  prepareBundledMcpAdapter,
+} from "./mcp-adapter";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import { getSceneResourceConfig } from "./scene-resources";
 import { DEFAULT_SCENE_ID, type SceneId } from "./scenes";
@@ -1690,13 +1694,16 @@ export async function startRpcSession(
       settingsManager,
     });
     const sceneResources = sceneId ? getSceneResourceConfig(sceneId) : undefined;
+    const sceneMcpServers = (sceneResources?.mcpServers ?? []).map((server) => (
+      server.id === "breakhub" ? prepareBreakhubMcpServerState(server, agentDir) : server
+    ));
     const {
       extensionPaths: mcpExtensionPaths,
       skillPaths: mcpSkillPaths,
       extensionFactories: mcpExtensionFactories = [],
     } = await prepareBundledMcpAdapter(packageManager, {
       cwd: sessionCwd,
-      sceneMcpServers: sceneResources?.mcpServers ?? [],
+      sceneMcpServers,
     });
 
     // Determine which tools to pass based on requested toolNames.

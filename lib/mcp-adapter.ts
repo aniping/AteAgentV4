@@ -5,8 +5,16 @@ import type {
   PackageManager,
 } from "@earendil-works/pi-coding-agent";
 import type { McpConfig, ServerEntry } from "pi-mcp-adapter/types";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { createJiti } from "jiti";
 import type { PluginPackageInfo } from "./api-types";
 
@@ -48,6 +56,37 @@ export interface SceneMcpServerConfig {
   args: string[];
   env?: Record<string, string>;
   lifecycle: "lazy" | "eager" | "keep-alive";
+}
+
+export function prepareBreakhubMcpServerState(
+  server: SceneMcpServerConfig,
+  agentDir: string,
+): SceneMcpServerConfig {
+  if (server.id !== "breakhub") {
+    throw new Error(`Cannot prepare BreakHub state for bundled MCP ${server.id}`);
+  }
+  const stateRoot = join(agentDir, "integrations", "breakhub");
+  const targetsPath = join(stateRoot, "breakhub_targets.json");
+  const bindingsPath = join(stateRoot, "breakhub_bindings.json");
+  const seedPath = join(dirname(server.command), "breakhub_targets.json");
+  mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
+  try {
+    copyFileSync(seedPath, targetsPath, constants.COPYFILE_EXCL);
+    chmodSync(targetsPath, 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (!statSync(targetsPath).isFile()) {
+      throw new Error(`BreakHub targets path is not a file: ${targetsPath}`);
+    }
+  }
+  return {
+    ...server,
+    env: {
+      ...server.env,
+      MCP_GATEWAY_TARGETS_PATH: targetsPath,
+      MCP_GATEWAY_BINDINGS_PATH: bindingsPath,
+    },
+  };
 }
 
 export function mergeSceneMcpServers(
