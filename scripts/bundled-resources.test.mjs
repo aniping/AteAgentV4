@@ -78,7 +78,12 @@ test("Skill validation keeps the five scene skill sets isolated", async () => {
     const summary = await validateBundledSkills(bundleRoot);
     assert.deepEqual(
       summary,
-      sceneIds.map((sceneId) => ({ sceneId, skillNames: [`${sceneId}-company`] })),
+      sceneIds.map((sceneId) => ({
+        sceneId,
+        skillNames: sceneId === "integration"
+          ? ["breakpoint-debugging", "integration-company"]
+          : [`${sceneId}-company`],
+      })),
     );
 
     const destination = await copyBundledResources(bundleRoot, join(tempRoot, "app"));

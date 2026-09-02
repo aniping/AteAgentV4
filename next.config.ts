@@ -29,7 +29,12 @@ function collectPackageTraceGlobs(rootPackage: string): string[] {
   return [...packages].sort().map((packageName) => `./node_modules/${packageName}/**/*`);
 }
 
-const bundledMcpTraceGlobs = standaloneBuild ? collectPackageTraceGlobs("pi-mcp-adapter") : [];
+const bundledMcpTraceGlobs = standaloneBuild
+  ? [...new Set([
+      ...collectPackageTraceGlobs("pi-mcp-adapter"),
+      ...collectPackageTraceGlobs("jiti"),
+    ])]
+  : [];
 let piVersion = "unknown";
 try {
   const piPkgPath = join(configDir, "node_modules/@earendil-works/pi-coding-agent/package.json");
@@ -49,6 +54,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: [
     "undici",
+    "jiti",
     "@earendil-works/pi-coding-agent",
     "@earendil-works/pi-agent-core",
     "@earendil-works/pi-ai",

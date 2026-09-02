@@ -1,0 +1,2 @@
+bundled-resources/scenes/*/mcp/**/*.json text eol=lf
+bundled-resources/scenes/*/mcp/**/*.exe -text

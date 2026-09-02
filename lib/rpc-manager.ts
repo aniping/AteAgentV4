@@ -17,7 +17,7 @@ import { validateAgentImages } from "./image-attachments";
 import { invalidateModelsCache } from "./models-cache";
 import { isModelAllowedByConfig, type ModelsConfig } from "./models-config";
 import { readModelsConfig } from "./models-config-store";
-import { prepareBundledMcpAdapter } from "./mcp-adapter";
+import { preferBundledSceneMcpAdapter, prepareBundledMcpAdapter } from "./mcp-adapter";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import { getSceneResourceConfig } from "./scene-resources";
 import { DEFAULT_SCENE_ID, type SceneId } from "./scenes";
@@ -1689,11 +1689,15 @@ export async function startRpcSession(
       agentDir,
       settingsManager,
     });
+    const sceneResources = sceneId ? getSceneResourceConfig(sceneId) : undefined;
     const {
       extensionPaths: mcpExtensionPaths,
       skillPaths: mcpSkillPaths,
-    } = await prepareBundledMcpAdapter(packageManager);
-    const sceneResources = sceneId ? getSceneResourceConfig(sceneId) : undefined;
+      extensionFactories: mcpExtensionFactories = [],
+    } = await prepareBundledMcpAdapter(packageManager, {
+      cwd: sessionCwd,
+      sceneMcpServers: sceneResources?.mcpServers ?? [],
+    });
 
     // Determine which tools to pass based on requested toolNames.
     // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
@@ -1732,13 +1736,19 @@ export async function startRpcSession(
           ...(sceneResources?.skillPaths ?? []),
         ],
         extensionFactories: [
+          ...mcpExtensionFactories,
           createPromptLocaleExtension(promptLocaleState),
           createProjectCommandBashExtension({
             cwd: sessionCwd,
             settings: settingsManager,
           }),
         ],
-        extensionsOverride: preferUserBashExtension,
+        extensionsOverride: (base) => {
+          const withPreferredBash = preferUserBashExtension(base);
+          return sceneResources && sceneResources.mcpServers.length > 0
+            ? preferBundledSceneMcpAdapter(withPreferredBash)
+            : withPreferredBash;
+        },
         ...(sceneResources
           ? {
               agentsFilesOverride: (base: { agentsFiles: Array<{ path: string; content: string }> }) => ({

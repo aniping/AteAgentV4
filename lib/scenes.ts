@@ -21,6 +21,7 @@ export interface SceneDefinition {
   accent: string;
   instructions: string;
   skillPaths: readonly string[];
+  mcpPaths: readonly string[];
 }
 
 const sceneIdSet = new Set<string>(SCENE_IDS);
@@ -43,10 +44,15 @@ function validateSceneBundle(): readonly SceneDefinition[] {
       throw new Error(`Invalid or duplicate scene id: ${scene.id}`);
     }
     seen.add(scene.id);
-    if (!scene.instructions || scene.skillPaths.length === 0) {
+    if (!scene.instructions || scene.skillPaths.length === 0 || !Array.isArray(scene.mcpPaths)) {
       throw new Error(`Scene resources are incomplete: ${scene.id}`);
     }
-    return { ...scene, id: scene.id, skillPaths: [...scene.skillPaths] };
+    return {
+      ...scene,
+      id: scene.id,
+      skillPaths: [...scene.skillPaths],
+      mcpPaths: [...scene.mcpPaths],
+    };
   });
 
   if (SCENE_IDS.some((id) => !seen.has(id)) || scenes.length !== SCENE_IDS.length) {

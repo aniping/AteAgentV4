@@ -1,0 +1,4 @@
+interface:
+  display_name: "Breakpoint Debugging"
+  short_description: "Manage BreakHub connections and debug breakpoints"
+  default_prompt: "Use $breakpoint-debugging to manage a BreakHub connection and debug calls safely."

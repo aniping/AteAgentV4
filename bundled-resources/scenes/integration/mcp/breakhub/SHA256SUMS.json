@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "integration.json": "031f3ffd77c665ca6e62288d9b1958abce282e84bd613fe138fcce799b976f4c",
+    "runtime/win-x64/breakhub-mcp.exe": "a8e52624fad97f43e4eed9a172dd84fb24a133af0593be1aa3c182fa2155a38b"
+  }
+}

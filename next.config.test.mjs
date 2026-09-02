@@ -38,6 +38,8 @@ test("portable builds trace the bundled MCP Adapter dependency closure", async (
     const includes = config.outputFileTracingIncludes?.["/*"] ?? [];
 
     assert.ok(includes.includes("./node_modules/pi-mcp-adapter/**/*"));
+    assert.ok(includes.includes("./node_modules/jiti/**/*"));
+    assert.ok(config.serverExternalPackages?.includes("jiti"));
     assert.ok(includes.includes("./node_modules/@modelcontextprotocol/client/**/*"));
     assert.ok(includes.includes("./node_modules/@napi-rs/keyring-win32-x64-msvc/**/*"));
   } finally {

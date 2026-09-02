@@ -1,13 +1,142 @@
-import type { PackageManager } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionFactory,
+  InlineExtension,
+  LoadExtensionsResult,
+  PackageManager,
+} from "@earendil-works/pi-coding-agent";
+import type { McpConfig, ServerEntry } from "pi-mcp-adapter/types";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createJiti } from "jiti";
 import type { PluginPackageInfo } from "./api-types";
 
 const MCP_ADAPTER_SOURCE = "npm:pi-mcp-adapter";
+const SCENE_MCP_ADAPTER_PATH = "<inline:pi-mcp-adapter>";
 
 interface BundledMcpAdapterResources {
   extensionPaths: string[];
   skillPaths: string[];
+  extensionFactories?: InlineExtension[];
+}
+
+interface PrepareBundledMcpAdapterOptions {
+  cwd: string;
+  sceneMcpServers: readonly SceneMcpServerConfig[];
+  loadAmbientConfig?: (cwd: string) => McpConfig;
+}
+
+interface McpAdapterRuntimeModule {
+  createMcpAdapter(options: { config: McpConfig }): ExtensionFactory;
+}
+
+interface McpAdapterConfigModule {
+  loadMcpConfig(overridePath?: string, cwd?: string): McpConfig;
+}
+
+interface McpAdapterRuntimeModules {
+  runtime: McpAdapterRuntimeModule;
+  config: McpAdapterConfigModule;
+}
+
+let mcpAdapterRuntimeModules: Promise<McpAdapterRuntimeModules> | undefined;
+
+export interface SceneMcpServerConfig {
+  id: string;
+  version: string;
+  serverName: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  lifecycle: "lazy" | "eager" | "keep-alive";
+}
+
+export function mergeSceneMcpServers(
+  ambient: McpConfig,
+  sceneServers: readonly SceneMcpServerConfig[],
+): McpConfig {
+  const bundledServers = Object.fromEntries(sceneServers.map((server) => {
+    const definition: ServerEntry = {
+      command: server.command,
+      lifecycle: server.lifecycle,
+      directTools: false,
+      ...(server.args.length > 0 ? { args: [...server.args] } : {}),
+      ...(server.env && Object.keys(server.env).length > 0 ? { env: { ...server.env } } : {}),
+    };
+    return [server.serverName, definition];
+  }));
+  return {
+    ...ambient,
+    settings: {
+      ...ambient.settings,
+      disableProxyTool: false,
+    },
+    mcpServers: {
+      ...ambient.mcpServers,
+      ...bundledServers,
+    },
+  };
+}
+
+function registersMcpAdapterSurface(extension: LoadExtensionsResult["extensions"][number]): boolean {
+  return extension.tools.has("mcp")
+    || extension.tools.has("mcpScript")
+    || extension.commands.has("mcp")
+    || extension.commands.has("mcp-auth");
+}
+
+export function preferBundledSceneMcpAdapter(base: LoadExtensionsResult): LoadExtensionsResult {
+  const bundled = base.extensions.find((extension) => extension.path === SCENE_MCP_ADAPTER_PATH);
+  if (!bundled) return base;
+
+  const removedPaths = new Set(
+    base.extensions
+      .filter((extension) => extension !== bundled && registersMcpAdapterSurface(extension))
+      .map((extension) => extension.path),
+  );
+  return {
+    ...base,
+    extensions: base.extensions.filter((extension) => !removedPaths.has(extension.path)),
+    errors: base.errors.filter((error) => {
+      if (removedPaths.has(error.path)) return false;
+      return !(
+        error.path === SCENE_MCP_ADAPTER_PATH
+        && /^(?:Tool "(?:mcp|mcpScript)"|Flag "--mcp-config") conflicts with /.test(error.error)
+      );
+    }),
+  };
+}
+
+function loadMcpAdapterRuntimeModules(): Promise<McpAdapterRuntimeModules> {
+  if (mcpAdapterRuntimeModules) return mcpAdapterRuntimeModules;
+  const packageRoot = join(process.cwd(), "node_modules", "pi-mcp-adapter");
+  const jiti = createJiti(join(process.cwd(), "package.json"));
+  mcpAdapterRuntimeModules = Promise.all([
+    jiti.import<McpAdapterRuntimeModule>(join(packageRoot, "index.ts")),
+    jiti.import<McpAdapterConfigModule>(join(packageRoot, "config.ts")),
+  ])
+    .then(([runtime, config]) => ({ runtime, config }))
+    .catch((error) => {
+      mcpAdapterRuntimeModules = undefined;
+      throw error;
+    });
+  return mcpAdapterRuntimeModules;
+}
+
+async function createSceneMcpAdapterFactory(
+  cwd: string,
+  sceneMcpServers: readonly SceneMcpServerConfig[],
+  loadAmbientConfig?: (cwd: string) => McpConfig,
+): Promise<ExtensionFactory> {
+  const { runtime, config } = await loadMcpAdapterRuntimeModules();
+  return async (pi) => {
+    const ambient = loadAmbientConfig
+      ? loadAmbientConfig(cwd)
+      : config.loadMcpConfig(undefined, cwd);
+    const factory = runtime.createMcpAdapter({
+      config: mergeSceneMcpServers(ambient, sceneMcpServers),
+    });
+    await factory(pi);
+  };
 }
 
 export function getBundledMcpAdapterResources(): BundledMcpAdapterResources {
@@ -83,11 +212,29 @@ export async function migrateUserMcpAdapterPackages(
 
 export async function prepareBundledMcpAdapter(
   packageManager: Pick<PackageManager, "listConfiguredPackages" | "removeAndPersist">,
+  options?: PrepareBundledMcpAdapterOptions,
 ): Promise<BundledMcpAdapterResources> {
   const bundledResources = getBundledMcpAdapterResources();
   const projectOverridesBuiltin = packageManager
     .listConfiguredPackages()
     .some((pkg) => pkg.scope === "project" && isMcpAdapterSource(pkg.source));
   await migrateUserMcpAdapterPackages(packageManager);
-  return projectOverridesBuiltin ? { extensionPaths: [], skillPaths: [] } : bundledResources;
+  if (projectOverridesBuiltin) {
+    if (!options || options.sceneMcpServers.length === 0) {
+      return { extensionPaths: [], skillPaths: [] };
+    }
+  }
+  if (!options || options.sceneMcpServers.length === 0) return bundledResources;
+  return {
+    extensionPaths: [],
+    skillPaths: projectOverridesBuiltin ? [] : bundledResources.skillPaths,
+    extensionFactories: [{
+      name: "pi-mcp-adapter",
+      factory: await createSceneMcpAdapterFactory(
+        options.cwd,
+        options.sceneMcpServers,
+        options.loadAmbientConfig,
+      ),
+    }],
+  };
 }

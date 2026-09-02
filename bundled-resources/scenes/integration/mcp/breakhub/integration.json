@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "breakhub",
+  "version": "0.1.0",
+  "platform": "win32",
+  "arch": "x64",
+  "mcp": {
+    "serverName": "microbreakpoint",
+    "executable": "runtime/win-x64/breakhub-mcp.exe",
+    "lifecycle": "lazy"
+  }
+}

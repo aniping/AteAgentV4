@@ -13,7 +13,8 @@
       "descriptionEn": "Clarify goals, boundaries, constraints, and acceptance criteria",
       "accent": "#06b6d4",
       "instructions": "scenes/requirements/AGENTS.md",
-      "skillPaths": ["scenes/requirements/skills"]
+      "skillPaths": ["scenes/requirements/skills"],
+      "mcpPaths": []
     },
     {
       "id": "design",
@@ -25,7 +26,8 @@
       "descriptionEn": "Design system, RF, hardware, software, and ATE solutions",
       "accent": "#8b5cf6",
       "instructions": "scenes/design/AGENTS.md",
-      "skillPaths": ["scenes/design/skills"]
+      "skillPaths": ["scenes/design/skills"],
+      "mcpPaths": []
     },
     {
       "id": "development",
@@ -37,7 +39,8 @@
       "descriptionEn": "Implement approved software, hardware, and automation solutions",
       "accent": "#3b82f6",
       "instructions": "scenes/development/AGENTS.md",
-      "skillPaths": ["scenes/development/skills"]
+      "skillPaths": ["scenes/development/skills"],
+      "mcpPaths": []
     },
     {
       "id": "integration",
@@ -49,7 +52,8 @@
       "descriptionEn": "Diagnose cross-system interface, timing, signal, and environment issues",
       "accent": "#f59e0b",
       "instructions": "scenes/integration/AGENTS.md",
-      "skillPaths": ["scenes/integration/skills"]
+      "skillPaths": ["scenes/integration/skills"],
+      "mcpPaths": ["scenes/integration/mcp"]
     },
     {
       "id": "testing",
@@ -61,7 +65,8 @@
       "descriptionEn": "Plan, execute, and record traceable verification evidence",
       "accent": "#22c55e",
       "instructions": "scenes/testing/AGENTS.md",
-      "skillPaths": ["scenes/testing/skills"]
+      "skillPaths": ["scenes/testing/skills"],
+      "mcpPaths": []
     }
   ]
 }
