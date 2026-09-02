@@ -7,7 +7,8 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { spawnSync } = require("node:child_process");
-const { copyBundledResources } = require("./bundled-resources.cjs");
+const { copyBundledResources, validateBundledResources } = require("./bundled-resources.cjs");
+const { patchPiMcpAdapter } = require("./patch-pi-mcp-adapter.cjs");
 
 const repoRoot = path.resolve(__dirname, "..");
 const buildRoot = path.join(repoRoot, "build");
@@ -178,6 +179,14 @@ async function main() {
   if (!new Set(["x64", "arm64"]).has(process.arch)) {
     throw new Error(`Unsupported Windows installer architecture: ${process.arch}`);
   }
+  patchPiMcpAdapter(repoRoot, { checkOnly: true });
+
+  const bundledResourcesRoot = path.join(repoRoot, "bundled-resources");
+  const bundledResourceTarget = {
+    targetPlatform: "win32",
+    targetArch: process.arch,
+  };
+  await validateBundledResources(bundledResourcesRoot, bundledResourceTarget);
 
   const windowsVersion = toWindowsVersion(packageJson.version);
 
@@ -259,7 +268,7 @@ async function main() {
   copyContents(staticRoot, path.join(appRoot, ".next", "static"));
   const publicRoot = path.join(repoRoot, "public");
   if (fs.existsSync(publicRoot)) fs.cpSync(publicRoot, path.join(appRoot, "public"), { recursive: true });
-  await copyBundledResources(path.join(repoRoot, "bundled-resources"), appRoot);
+  await copyBundledResources(bundledResourcesRoot, appRoot, bundledResourceTarget);
 
   removeRedundantNestedPackage(
     path.join(appRoot, "node_modules", "@mistralai", "mistralai"),
@@ -362,6 +371,9 @@ async function main() {
     "app/bundled-resources/scenes/design/AGENTS.md",
     "app/bundled-resources/scenes/development/AGENTS.md",
     "app/bundled-resources/scenes/integration/AGENTS.md",
+    "app/bundled-resources/scenes/integration/mcp/breakhub/integration.json",
+    "app/bundled-resources/scenes/integration/mcp/breakhub/SHA256SUMS.json",
+    "app/bundled-resources/scenes/integration/mcp/breakhub/runtime/win-x64/breakhub-mcp.exe",
     "app/bundled-resources/scenes/testing/AGENTS.md",
     "app/.next/BUILD_ID",
     "app/node_modules/@earendil-works/pi-agent-core/package.json",
@@ -375,12 +387,23 @@ async function main() {
     "app/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/template.css",
     "app/node_modules/@earendil-works/pi-coding-agent/dist/core/export-html/vendor/marked.min.js",
     "app/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/assets/clankolas.png",
+    "app/node_modules/jiti/package.json",
+    "app/node_modules/jiti/lib/jiti.cjs",
+    "app/node_modules/jiti/lib/jiti.mjs",
+    "app/node_modules/jiti/dist/jiti.cjs",
+    "app/node_modules/jiti/dist/babel.cjs",
+    "app/node_modules/pi-mcp-adapter/index.ts",
+    "app/node_modules/pi-mcp-adapter/config.ts",
+    "app/node_modules/pi-mcp-adapter/direct-tools.ts",
+    "app/node_modules/pi-mcp-adapter/metadata-cache.ts",
+    "app/node_modules/pi-mcp-adapter/types.ts",
   ];
   for (const required of requiredFiles) {
     if (!fs.existsSync(path.join(stagingRoot, required))) {
       throw new Error(`Installer payload entry is missing: ${required}`);
     }
   }
+  patchPiMcpAdapter(appRoot, { checkOnly: true });
 
   const relativePaths = listFiles(stagingRoot).map((file) => path.relative(stagingRoot, file));
   const longestRelativePath = relativePaths.sort((a, b) => b.length - a.length)[0];

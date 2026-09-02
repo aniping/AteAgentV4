@@ -19,8 +19,9 @@ Wireless ATE Agent 是面向无线装备研发与调试场景的本地智能助�
 - 历史会话按项目和场景双重筛选；升级前创建的会话显示在“未分类历史”，不会根据标题或内容猜测归类。
 - 用户全局/项目 Skill 仍按 Pi 原有规则加载；安装包内置 Skill 则由当前场景的资源清单追加。
 - “技能”面板会显示当前场景的内置 Skill 并标记为只读；用户手动安装的 Skill 仍可按原方式管理。
+- 联调场景内置 `breakpoint-debugging` Skill 与 Windows x64 BreakHub MCP。它只在联调会话中通过现有 MCP Adapter 注入，不写入用户的 `mcp.json`，也不会泄漏到其他场景。
 
-内置资源入口为 `bundled-resources/bundle.json`，五个场景的 `AGENTS.md` 和 Skill 预留目录位于 `bundled-resources/scenes/<scene>/`。后续把自研 Skill 目录（包含 `SKILL.md`）放入相应的 `skills/`，运行 `npm run package` 即会使用当前 Pi 运行时逐场景加载校验，并复制到安装包的 `app/bundled-resources`。空的预留目录合法；无效元数据、加载告警、同场景 Skill 重名、越出声明目录或包含符号链接/目录联接都会终止打包。需要跨场景复用时，将 Skill 保留一份，并在多个场景的 `skillPaths` 中引用同一路径。
+内置资源入口为 `bundled-resources/bundle.json`，五个场景的 `AGENTS.md`、Skill 和 MCP 目录位于 `bundled-resources/scenes/<scene>/`。自研 Skill 放入相应的 `skills/`；场景 MCP 放入同级 `mcp/<integration-id>/`，并通过 `mcpPaths` 声明。运行 `npm run package` 会逐场景校验并复制到安装包的 `app/bundled-resources`。空的预留目录合法；无效元数据、加载告警、同场景 Skill/MCP 重名、路径逃逸、文件系统链接、MCP 校验和或平台架构不匹配都会终止打包。需要跨场景复用 Skill 时，将实体保留一份，并在多个场景的 `skillPaths` 中引用同一路径。
 
 ## 快速开始：使用 Windows 安装程序
 

@@ -2,6 +2,8 @@
 
 本文说明如何制作可从 AteAgent Skills 面板上传的普通 Skill 包和集成包。普通 Skill 包只包含提示词、脚本和参考资料；集成包还可以携带本地运行时，并自动注册一个 stdio MCP 服务。
 
+> 本文描述的是用户上传安装链路。随 Windows 安装包内置、且只在特定场景启用的集成不使用 ZIP：Skill 直接放在 `bundled-resources/scenes/<scene>/skills/`，MCP 放在同级 `mcp/<integration-id>/`，由 `bundle.json` 的 `mcpPaths` 声明。内置 MCP 不写入用户或项目的 `mcp.json`。
+
 ## 目录
 
 - [选择包类型](#选择包类型)

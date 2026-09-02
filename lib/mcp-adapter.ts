@@ -59,6 +59,7 @@ export function mergeSceneMcpServers(
       command: server.command,
       lifecycle: server.lifecycle,
       directTools: false,
+      ignoreDirectToolsEnv: true,
       ...(server.args.length > 0 ? { args: [...server.args] } : {}),
       ...(server.env && Object.keys(server.env).length > 0 ? { env: { ...server.env } } : {}),
     };
@@ -84,15 +85,39 @@ function registersMcpAdapterSurface(extension: LoadExtensionsResult["extensions"
     || extension.commands.has("mcp-auth");
 }
 
+function shutdownCompetingMcpAdapter(
+  extension: LoadExtensionsResult["extensions"][number],
+): void {
+  const handlers = extension.handlers.get("session_shutdown") ?? [];
+  for (const handler of handlers) {
+    try {
+      const pending = handler({ type: "session_shutdown", reason: "reload" }, undefined);
+      if (pending && typeof (pending as PromiseLike<unknown>).then === "function") {
+        void Promise.resolve(pending).catch((error) => {
+          console.error(
+            `[Wireless ATE Agent] failed to shut down competing MCP Adapter ${extension.path}:`,
+            error,
+          );
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[Wireless ATE Agent] failed to shut down competing MCP Adapter ${extension.path}:`,
+        error,
+      );
+    }
+  }
+}
+
 export function preferBundledSceneMcpAdapter(base: LoadExtensionsResult): LoadExtensionsResult {
   const bundled = base.extensions.find((extension) => extension.path === SCENE_MCP_ADAPTER_PATH);
   if (!bundled) return base;
 
-  const removedPaths = new Set(
-    base.extensions
-      .filter((extension) => extension !== bundled && registersMcpAdapterSurface(extension))
-      .map((extension) => extension.path),
+  const competingAdapters = base.extensions.filter(
+    (extension) => extension !== bundled && registersMcpAdapterSurface(extension),
   );
+  for (const extension of competingAdapters) shutdownCompetingMcpAdapter(extension);
+  const removedPaths = new Set(competingAdapters.map((extension) => extension.path));
   return {
     ...base,
     extensions: base.extensions.filter((extension) => !removedPaths.has(extension.path)),

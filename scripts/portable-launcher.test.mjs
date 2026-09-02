@@ -53,10 +53,33 @@ test("Windows package builds a Wireless ATE Agent NSIS installer with compatible
     readFile(new URL("./stop-all-server.cs", import.meta.url), "utf8"),
   ]);
 
-  assert.equal(JSON.parse(packageJson).scripts.package, "scripts\\package-installer.cmd");
+  const parsedPackageJson = JSON.parse(packageJson);
+  assert.equal(parsedPackageJson.scripts.package, "scripts\\package-installer.cmd");
+  assert.equal(parsedPackageJson.scripts.postinstall, "node scripts/patch-pi-mcp-adapter.cjs");
+  assert.equal(
+    parsedPackageJson.scripts.prepack,
+    "node scripts/patch-pi-mcp-adapter.cjs --check && node scripts/bundled-resources.cjs",
+  );
+  assert.ok(parsedPackageJson.files.includes("scripts/bundled-resources.cjs"));
+  assert.ok(parsedPackageJson.files.includes("scripts/patch-pi-mcp-adapter.cjs"));
   assert.match(packageCommand, /node\.exe?"? "%~dp0package-installer\.cjs"/i);
   assert.match(packageScript, /Wireless-ATE-Agent-Setup-/);
   assert.match(packageScript, /copyBundledResources/);
+  assert.match(packageScript, /validateBundledResources\(bundledResourcesRoot, bundledResourceTarget\)/);
+  assert.match(packageScript, /targetPlatform: "win32"/);
+  assert.match(packageScript, /targetArch: process\.arch/);
+  assert.match(packageScript, /runtime\/win-x64\/breakhub-mcp\.exe/);
+  assert.match(packageScript, /app\/node_modules\/jiti\/package\.json/);
+  assert.match(packageScript, /app\/node_modules\/jiti\/lib\/jiti\.cjs/);
+  assert.match(packageScript, /app\/node_modules\/jiti\/lib\/jiti\.mjs/);
+  assert.match(packageScript, /app\/node_modules\/jiti\/dist\/jiti\.cjs/);
+  assert.match(packageScript, /app\/node_modules\/jiti\/dist\/babel\.cjs/);
+  assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/index\.ts/);
+  assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/config\.ts/);
+  assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/direct-tools\.ts/);
+  assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/metadata-cache\.ts/);
+  assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/types\.ts/);
+  assert.match(packageScript, /patchPiMcpAdapter\(appRoot, \{ checkOnly: true \}\)/);
   assert.match(packageScript, /removeRedundantNestedPackage/);
   assert.match(packageScript, /pruneInstallerPayload/);
   assert.match(packageScript, /makensis/i);

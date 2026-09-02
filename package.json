@@ -27,6 +27,10 @@
     "bundled-resources/bundle.json",
     "bundled-resources/scenes/*/AGENTS.md",
     "bundled-resources/scenes/*/skills/.gitkeep",
+    "bundled-resources/scenes/integration/skills/breakpoint-debugging/**",
+    "bundled-resources/scenes/*/mcp/**",
+    "scripts/bundled-resources.cjs",
+    "scripts/patch-pi-mcp-adapter.cjs",
     "next.config.ts",
     "package.json"
   ],
@@ -37,6 +41,8 @@
     "start": "next start -H 127.0.0.1 -p 30141",
     "start:lan": "next start -H 0.0.0.0 -p 30141",
     "package": "scripts\\package-installer.cmd",
+    "postinstall": "node scripts/patch-pi-mcp-adapter.cjs",
+    "prepack": "node scripts/patch-pi-mcp-adapter.cjs --check && node scripts/bundled-resources.cjs",
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public"

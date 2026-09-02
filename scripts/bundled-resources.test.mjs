@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
@@ -30,6 +32,96 @@ function writeSkill(skillRoot, directoryName, name, description = `${name} test 
     `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`,
     "utf8",
   );
+}
+
+function sha256(contents) {
+  return createHash("sha256").update(contents).digest("hex");
+}
+
+function createPeRuntime(machine = 0x8664, { characteristics = 0x0002, optionalMagic = 0x20b } = {}) {
+  const runtime = Buffer.alloc(1024);
+  const peOffset = 0x80;
+  runtime.write("MZ", 0, "ascii");
+  runtime.writeUInt32LE(peOffset, 0x3c);
+  runtime.write("PE\0\0", peOffset, "binary");
+  runtime.writeUInt16LE(machine, peOffset + 4);
+  runtime.writeUInt16LE(1, peOffset + 6);
+  runtime.writeUInt16LE(0xf0, peOffset + 20);
+  runtime.writeUInt16LE(characteristics, peOffset + 22);
+  runtime.writeUInt16LE(optionalMagic, peOffset + 24);
+  runtime.write(".text\0\0\0", peOffset + 24 + 0xf0, "binary");
+  return runtime;
+}
+
+function writeFixtureFile(root, relativePath, contents) {
+  const destination = join(root, ...relativePath.split("/"));
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, contents);
+  return destination;
+}
+
+function createBreakhubBundleFixture(
+  bundleRoot,
+  { machine = 0x8664, characteristics = 0x0002, optionalMagic = 0x20b } = {},
+) {
+  const manifest = JSON.parse(readFileSync(join(sourceRoot, "bundle.json"), "utf8"));
+  manifest.scenes = manifest.scenes.map((scene) => ({
+    ...scene,
+    mcpPaths: scene.id === "integration" ? ["scenes/integration/mcp"] : [],
+  }));
+  mkdirSync(bundleRoot, { recursive: true });
+  writeFileSync(join(bundleRoot, "bundle.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  for (const scene of manifest.scenes) {
+    writeFixtureFile(bundleRoot, scene.instructions, `# ${scene.agentName}\n`);
+    for (const skillPath of scene.skillPaths) {
+      writeSkill(join(bundleRoot, ...skillPath.split("/")), `${scene.id}-fixture`, `${scene.id}-fixture`);
+    }
+  }
+
+  const integrationManifest = {
+    schemaVersion: 1,
+    id: "breakhub",
+    version: "0.1.0",
+    platform: "win32",
+    arch: "x64",
+    mcp: {
+      serverName: "microbreakpoint",
+      executable: "runtime/win-x64/breakhub-mcp.exe",
+      lifecycle: "lazy",
+    },
+  };
+  const mcpRoot = join(bundleRoot, "scenes", "integration", "mcp", "breakhub");
+  const fixtureFiles = new Map([
+    ["integration.json", `${JSON.stringify(integrationManifest, null, 2)}\n`],
+    ["runtime/win-x64/breakhub-mcp.exe", createPeRuntime(machine, { characteristics, optionalMagic })],
+  ]);
+  for (const [relativePath, contents] of fixtureFiles) {
+    writeFixtureFile(mcpRoot, relativePath, contents);
+  }
+  writeFixtureFile(
+    mcpRoot,
+    "SHA256SUMS.json",
+    `${JSON.stringify({
+      schemaVersion: 1,
+      files: Object.fromEntries(
+        [...fixtureFiles].map(([relativePath, contents]) => [relativePath, sha256(contents)]),
+      ),
+    }, null, 2)}\n`,
+  );
+
+  return {
+    manifestPath: join(mcpRoot, "integration.json"),
+    mcpRoot,
+    runtimePath: join(mcpRoot, "runtime", "win-x64", "breakhub-mcp.exe"),
+  };
+}
+
+function refreshFixtureManifestChecksum(mcpRoot) {
+  const checksumPath = join(mcpRoot, "SHA256SUMS.json");
+  const checksums = JSON.parse(readFileSync(checksumPath, "utf8"));
+  checksums.files["integration.json"] = sha256(readFileSync(join(mcpRoot, "integration.json")));
+  writeFileSync(checksumPath, `${JSON.stringify(checksums, null, 2)}\n`, "utf8");
 }
 
 test("bundled resources validate and copy into the standalone app root", async () => {
@@ -60,6 +152,177 @@ test("bundle validation rejects a resource path outside the bundle root", async 
     manifest.scenes[0].instructions = "../outside/AGENTS.md";
     writeFileSync(manifestPath, JSON.stringify(manifest), "utf8");
     await assert.rejects(() => validateBundledResources(bundleRoot), /escapes bundle root/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects an MCP root outside the bundle root", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-root-escape-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    createBreakhubBundleFixture(bundleRoot);
+    const manifestPath = join(bundleRoot, "bundle.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.scenes.find((scene) => scene.id === "integration").mcpPaths = ["../outside-mcp"];
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /MCP.*escapes bundle root|escapes bundle root.*MCP/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a filesystem link in an MCP root ancestor", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-ancestor-link-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    createBreakhubBundleFixture(bundleRoot);
+    const originalMcpRoot = join(bundleRoot, "scenes", "integration", "mcp");
+    const realParent = join(bundleRoot, "mcp-real-parent");
+    const linkedParent = join(bundleRoot, "scenes", "integration", "mcp-linked-parent");
+    mkdirSync(realParent, { recursive: true });
+    renameSync(originalMcpRoot, join(realParent, "mcp"));
+    symlinkSync(realParent, linkedParent, "junction");
+
+    const manifestPath = join(bundleRoot, "bundle.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.scenes.find((scene) => scene.id === "integration").mcpPaths = [
+      "scenes/integration/mcp-linked-parent/mcp",
+    ];
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /MCP.*filesystem link|filesystem link.*MCP/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a malformed bundled MCP manifest", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-manifest-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    const fixture = createBreakhubBundleFixture(bundleRoot);
+    const manifest = JSON.parse(readFileSync(fixture.manifestPath, "utf8"));
+    manifest.schemaVersion = 2;
+    writeFileSync(fixture.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    refreshFixtureManifestChecksum(fixture.mcpRoot);
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /integration\.json|MCP manifest|schema/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a missing bundled MCP runtime", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-runtime-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    const fixture = createBreakhubBundleFixture(bundleRoot);
+    rmSync(fixture.runtimePath);
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /breakhub-mcp\.exe|MCP runtime|missing/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a bundled MCP checksum mismatch", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-checksum-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    const fixture = createBreakhubBundleFixture(bundleRoot);
+    const runtime = readFileSync(fixture.runtimePath);
+    runtime[runtime.length - 1] ^= 1;
+    writeFileSync(fixture.runtimePath, runtime);
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /SHA-?256|checksum|digest|hash/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a bundled MCP executable path escape", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-runtime-escape-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    const fixture = createBreakhubBundleFixture(bundleRoot);
+    const manifest = JSON.parse(readFileSync(fixture.manifestPath, "utf8"));
+    manifest.mcp.executable = "../outside/breakhub-mcp.exe";
+    writeFileSync(fixture.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    refreshFixtureManifestChecksum(fixture.mcpRoot);
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /MCP executable.*escape|path.*escape|outside.*MCP/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a bundled MCP runtime with the wrong PE architecture", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-architecture-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    createBreakhubBundleFixture(bundleRoot, { machine: 0xaa64 });
+
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot),
+      /architecture|machine|x64|arm64/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects a non-executable or non-PE32+ MCP image", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-invalid-pe-"));
+  try {
+    const nonExecutableRoot = join(tempRoot, "non-executable");
+    createBreakhubBundleFixture(nonExecutableRoot, { characteristics: 0 });
+    await assert.rejects(
+      () => validateBundledResources(nonExecutableRoot),
+      /executable PE32\+ image/i,
+    );
+
+    const pe32Root = join(tempRoot, "pe32");
+    createBreakhubBundleFixture(pe32Root, { optionalMagic: 0x10b });
+    await assert.rejects(
+      () => validateBundledResources(pe32Root),
+      /executable PE32\+ image/i,
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bundle validation rejects an installer architecture unsupported by the bundled MCP", async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "wireless-ate-mcp-target-architecture-"));
+  try {
+    const bundleRoot = join(tempRoot, "bundle");
+    createBreakhubBundleFixture(bundleRoot);
+
+    await validateBundledResources(bundleRoot, { targetPlatform: "win32", targetArch: "x64" });
+    await assert.rejects(
+      () => validateBundledResources(bundleRoot, { targetPlatform: "win32", targetArch: "arm64" }),
+      /targets x64, not arm64/i,
+    );
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
