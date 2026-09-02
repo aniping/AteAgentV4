@@ -374,6 +374,7 @@ async function main() {
     "app/bundled-resources/scenes/integration/mcp/breakhub/integration.json",
     "app/bundled-resources/scenes/integration/mcp/breakhub/SHA256SUMS.json",
     "app/bundled-resources/scenes/integration/mcp/breakhub/runtime/win-x64/breakhub-mcp.exe",
+    "app/bundled-resources/scenes/integration/mcp/breakhub/runtime/win-x64/breakhub_targets.json",
     "app/bundled-resources/scenes/testing/AGENTS.md",
     "app/.next/BUILD_ID",
     "app/node_modules/@earendil-works/pi-agent-core/package.json",

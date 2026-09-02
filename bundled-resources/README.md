@@ -22,10 +22,12 @@ scenes/integration/
 └─ mcp/breakhub/
    ├─ integration.json
    ├─ SHA256SUMS.json
-   └─ runtime/win-x64/breakhub-mcp.exe
+   └─ runtime/win-x64/
+      ├─ breakhub-mcp.exe
+      └─ breakhub_targets.json
 ```
 
-场景通过 `bundle.json` 的 `mcpPaths` 声明 MCP 根目录。打包前后都会拒绝路径逃逸、文件系统链接、遗漏文件、SHA-256 不匹配、非法 PE 或目标架构不匹配；当前 BreakHub 只支持 Windows x64，因此不能生成包含它的 Windows arm64 安装包。
+场景通过 `bundle.json` 的 `mcpPaths` 声明 MCP 根目录。BreakHub 的 `breakhub_targets.json` 必须与 EXE 同目录，安装包内置合法的空连接表，不会把示例中的假 Token 当成真实连接。打包前后都会拒绝路径逃逸、文件系统链接、遗漏文件、SHA-256 不匹配、非法 PE 或目标架构不匹配；当前 BreakHub 只支持 Windows x64，因此不能生成包含它的 Windows arm64 安装包。
 
 联调会话只保留一个 MCP Adapter：先读取用户与项目现有 MCP 配置，再以场景内置定义整项覆盖同名 `microbreakpoint` 服务。内存叠加会强制保留 `mcp` proxy，并禁止把 BreakHub 展开为 direct tools，使 `breakpoint-debugging` Skill 的调用方式不受 ambient 设置或 `MCP_DIRECT_TOOLS` 环境覆盖影响。它不会修改用户的 `mcp.json`，退出联调场景后也不会把 BreakHub 暴露给其他场景。如果全局或项目设置还声明了另一份 Adapter（包括直接扩展路径），联调场景会主动关闭并过滤它，改用内置版本；其他场景仍沿用原来的 Adapter 选择规则。
 

@@ -137,6 +137,19 @@ test("bundled resources validate and copy into the standalone app root", async (
       JSON.parse(readFileSync(join(destination, "bundle.json"), "utf8")),
       manifest,
     );
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(
+        destination,
+        "scenes",
+        "integration",
+        "mcp",
+        "breakhub",
+        "runtime",
+        "win-x64",
+        "breakhub_targets.json",
+      ), "utf8")),
+      { version: 2, connections: [] },
+    );
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

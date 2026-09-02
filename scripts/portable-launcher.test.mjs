@@ -69,6 +69,12 @@ test("Windows package builds a Wireless ATE Agent NSIS installer with compatible
   assert.match(packageScript, /targetPlatform: "win32"/);
   assert.match(packageScript, /targetArch: process\.arch/);
   assert.match(packageScript, /runtime\/win-x64\/breakhub-mcp\.exe/);
+  const requiredFilesBlock = packageScript.match(/const requiredFiles = \[[\s\S]*?\n  \];/)?.[0];
+  assert.ok(requiredFilesBlock, "installer requiredFiles guard is missing");
+  assert.match(
+    requiredFilesBlock,
+    /app\/bundled-resources\/scenes\/integration\/mcp\/breakhub\/runtime\/win-x64\/breakhub_targets\.json/,
+  );
   assert.match(packageScript, /app\/node_modules\/jiti\/package\.json/);
   assert.match(packageScript, /app\/node_modules\/jiti\/lib\/jiti\.cjs/);
   assert.match(packageScript, /app\/node_modules\/jiti\/lib\/jiti\.mjs/);
