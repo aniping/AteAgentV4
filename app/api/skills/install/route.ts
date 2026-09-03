@@ -19,10 +19,20 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { package: pkg, scope, cwd } = await req.json() as { package?: string; scope?: string; cwd?: string };
-    if (!pkg?.trim()) return NextResponse.json({ error: "package required" }, { status: 400 });
+    const value: unknown = await req.json();
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
+    }
+    const body = value as { package?: unknown; scope?: unknown; cwd?: unknown };
+    const pkg = typeof body.package === "string" ? body.package.trim() : "";
+    if (!pkg) return NextResponse.json({ error: "package required" }, { status: 400 });
+    if (body.scope !== "global" && body.scope !== "project") {
+      return NextResponse.json({ error: "scope must be global or project" }, { status: 400 });
+    }
+    const scope = body.scope;
+    const cwd = typeof body.cwd === "string" ? body.cwd.trim() : "";
 
-    const isGlobal = scope !== "project";
+    const isGlobal = scope === "global";
     if (!isGlobal) {
       if (!cwd) return NextResponse.json({ error: "cwd required for project install" }, { status: 400 });
       const allowedRoots = await getAllowedFileRoots();
@@ -36,7 +46,7 @@ export async function POST(req: Request) {
         );
       }
     }
-    const args = ["skills", "add", pkg.trim(), "-y", "--agent", "pi"];
+    const args = ["skills", "add", pkg, "-y", "--agent", "pi"];
     if (isGlobal) args.push("-g");
 
     console.log(`[skills/install] running: npx ${args.join(" ")}`);

@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useIsMobile } from "@/hooks/useIsMobile";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useI18n } from "@/hooks/useI18n";
-import { ConfigAddButton } from "@/components/ConfigAddButton";
 import type {
+  SkillArchiveInspection,
   SkillInfo as Skill,
   SkillInstallScope,
   SkillSearchResult,
@@ -12,129 +17,50 @@ import type {
   SkillUpdateResult,
 } from "@/lib/api-types";
 import { MAX_SKILL_ARCHIVE_LABEL } from "@/lib/skill-archive-limits";
-import type { SceneId } from "@/lib/scenes";
+import {
+  getSceneDefinition,
+  getSceneLabel,
+  type SceneId,
+} from "@/lib/scenes";
+import styles from "./SkillsConfig.module.css";
 
-function shortenPath(p: string): string {
-  // Match common home dir patterns: /Users/xxx, /home/xxx
-  return p.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+type Translate = ReturnType<typeof useI18n>["t"];
+type SkillView = "available" | "manage" | "add";
+type ManageFilter = "all" | "project" | "global" | "path";
+type AddSource = "market" | "zip";
+type SkillScope = "scene" | "project" | "global" | "path";
+
+const SKILL_VIEWS: SkillView[] = ["available", "manage", "add"];
+
+function shortenPath(path: string): string {
+  return path
+    .replace(/^[A-Za-z]:\\Users\\[^\\]+/i, "~")
+    .replace(/^\/(?:Users|home)\/[^/]+/, "~");
 }
 
-function sourceLabel(skill: Skill): string {
-  if (skill.builtInSceneId) return "built-in";
-  const src = skill.sourceInfo?.source;
+function projectName(cwd: string): string {
+  const segments = cwd.split(/[\\/]/).filter(Boolean);
+  return segments.at(-1) ?? cwd;
+}
+
+function skillScope(skill: Skill): SkillScope {
+  if (skill.builtInSceneId) return "scene";
   const scope = skill.sourceInfo?.scope;
-  if (scope === "user" || src === "user") return "global";
-  if (scope === "project" || src === "project") return "project";
+  const source = skill.sourceInfo?.source;
+  if (scope === "project" || source === "project") return "project";
+  if (scope === "user" || scope === "global" || source === "user") return "global";
   return "path";
 }
 
-function skillGroupLabel(skill: Skill): string {
-  const source = sourceLabel(skill);
-  if (source === "path") return source;
-  return skill.install?.skillsShUrl ? `${source} / skills.sh` : source;
+function scopeLabel(scope: SkillScope, t: Translate): string {
+  if (scope === "scene") return t("skills.sceneBuiltInGroup");
+  if (scope === "project") return t("skills.currentProject");
+  if (scope === "global") return t("skills.globalGroup");
+  return t("skills.customPath");
 }
 
 function updateKey(skill: Skill): string | null {
-  return skill.install
-    ? `${skill.install.scope}\0${skill.install.package}`
-    : null;
-}
-
-const SKILL_GROUP_ORDER = [
-  "built-in",
-  "project / skills.sh",
-  "project",
-  "global / skills.sh",
-  "global",
-  "path",
-] as const;
-
-const SKILL_ROW_STYLE = { display: "flex", alignItems: "center", gap: 7, padding: "8px 8px", borderRadius: 5, cursor: "pointer" } as const;
-const SKILL_DOT_STYLE = { flexShrink: 0, width: 7, height: 7, borderRadius: "50%", transition: "background 0.15s, box-shadow 0.15s" } as const;
-const SKILL_NAME_STYLE = { fontSize: 12, fontFamily: "var(--font-mono)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
-const SKILL_GROUP_HEADER_STYLE = { padding: "4px 8px 3px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" } as const;
-const SKILL_UPDATE_STYLE = { color: "#d97706", fontSize: 13, lineHeight: 1, flexShrink: 0 } as const;
-
-type Translate = ReturnType<typeof useI18n>["t"];
-
-function buildSkillGroups(skills: Skill[]): { label: string; skills: Skill[] }[] {
-  return SKILL_GROUP_ORDER
-    .map((label) => ({
-      label,
-      skills: skills.filter((skill) => skillGroupLabel(skill) === label),
-    }))
-    .filter((group) => group.skills.length > 0);
-}
-
-function SkillListRow({ skill, isSelected, updateAvailable, onSelect, t }: {
-  skill: Skill;
-  isSelected: boolean;
-  updateAvailable: boolean;
-  onSelect: () => void;
-  t: Translate;
-}) {
-  const disabled = skill.disableModelInvocation;
-  return (
-    <div
-      onClick={onSelect}
-      style={{ ...SKILL_ROW_STYLE, background: isSelected ? "var(--bg-selected)" : "none" }}
-      onMouseEnter={(event) => {
-        if (!isSelected) event.currentTarget.style.background = "var(--bg-hover)";
-      }}
-      onMouseLeave={(event) => {
-        if (!isSelected) event.currentTarget.style.background = "none";
-      }}
-    >
-      <span style={{ ...SKILL_DOT_STYLE, background: disabled ? "var(--border)" : "var(--accent)", boxShadow: disabled ? "none" : "0 0 4px var(--accent)" }} />
-      <span style={{ ...SKILL_NAME_STYLE, fontWeight: isSelected ? 600 : 400, color: disabled ? "var(--text-dim)" : "var(--text)" }}>
-        {skill.name}
-      </span>
-      {updateAvailable && <span title={t("i18n.updateAvailable")} style={SKILL_UPDATE_STYLE}>↑</span>}
-    </div>
-  );
-}
-
-function SkillGroupBlock({ label, skills, dormantOpen, selected, addMode, updateStatuses, onSelect, onToggleDormant, t }: {
-  label: string;
-  skills: Skill[];
-  dormantOpen: boolean;
-  selected: string | null;
-  addMode: boolean;
-  updateStatuses: Record<string, SkillUpdateResult>;
-  onSelect: (skill: Skill) => void;
-  onToggleDormant: () => void;
-  t: Translate;
-}) {
-  const activeSkills = skills.filter((skill) => !skill.disableModelInvocation);
-  const dormantSkills = skills.filter((skill) => skill.disableModelInvocation);
-  const renderRow = (skill: Skill) => {
-    const key = updateKey(skill);
-    return (
-      <SkillListRow
-        key={skill.filePath}
-        skill={skill}
-        isSelected={!addMode && selected === skill.filePath}
-        updateAvailable={Boolean(key && updateStatuses[key]?.state === "update-available")}
-        onSelect={() => onSelect(skill)}
-        t={t}
-      />
-    );
-  };
-  return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={SKILL_GROUP_HEADER_STYLE}>{label}</div>
-      {activeSkills.map(renderRow)}
-      {dormantSkills.length > 0 && (
-        <>
-          <div onClick={onToggleDormant} style={{ ...SKILL_GROUP_HEADER_STYLE, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", userSelect: "none" }}>
-            <span style={{ fontSize: 8 }}>{dormantOpen ? "▾" : "▸"}</span>
-            {t("i18n.dormant")} ({dormantSkills.length})
-          </div>
-          {dormantOpen && dormantSkills.map(renderRow)}
-        </>
-      )}
-    </div>
-  );
+  return skill.install ? `${skill.install.scope}\0${skill.install.package}` : null;
 }
 
 function shortVersion(version?: string): string {
@@ -147,59 +73,138 @@ function formatArchiveSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function matchesSkill(skill: Skill, query: string): boolean {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return true;
+  return `${skill.name}\n${skill.description}`.toLocaleLowerCase().includes(normalized);
+}
+
+function sortSkills(skills: Skill[]): Skill[] {
+  const order: Record<SkillScope, number> = { scene: 0, project: 1, global: 2, path: 3 };
+  return [...skills].sort((left, right) => {
+    const scopeDifference = order[skillScope(left)] - order[skillScope(right)];
+    return scopeDifference || left.name.localeCompare(right.name);
+  });
+}
+
+function sourceValue(skill: Skill, t: Translate): string {
+  if (skill.builtInSceneId) return t("skills.builtIntoScene");
+  if (skill.install?.skillsShUrl) return "skills.sh";
+  if (skill.archiveInstall) return t("skills.localZip");
+  return scopeLabel(skillScope(skill), t);
+}
+
+function SkillListRow({
+  skill,
+  selected,
+  updateAvailable,
+  onSelect,
+  t,
+}: {
+  skill: Skill;
+  selected: boolean;
+  updateAvailable: boolean;
+  onSelect: () => void;
+  t: Translate;
+}) {
+  const modelCallable = !skill.disableModelInvocation;
+  return (
+    <button
+      type="button"
+      className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
+      aria-pressed={selected}
+      data-skill-row
+      onClick={onSelect}
+    >
+      <span className={styles.rowMain}>
+        <span className={styles.rowName}>{skill.name}</span>
+        <span className={styles.rowMeta}>{scopeLabel(skillScope(skill), t)}</span>
+      </span>
+      <span className={`${styles.status} ${modelCallable ? styles.statusOn : styles.statusManual}`}>
+        {updateAvailable
+          ? t("i18n.updateAvailable")
+          : modelCallable
+            ? t("skills.modelCallable")
+            : t("skills.manualOnly")}
+      </span>
+    </button>
+  );
+}
+
+function SkillGroups({
+  groups,
+  selectedPath,
+  updateStatuses,
+  emptyMessage,
+  onSelect,
+  t,
+}: {
+  groups: Array<{ key: string; label: string; skills: Skill[]; showWhenEmpty?: boolean; emptyMessage?: string }>;
+  selectedPath: string | null;
+  updateStatuses: Record<string, SkillUpdateResult>;
+  emptyMessage: string;
+  onSelect: (skill: Skill) => void;
+  t: Translate;
+}) {
+  const visibleGroups = groups.filter((group) => group.skills.length > 0 || group.showWhenEmpty);
+  if (visibleGroups.length === 0) return <div className={styles.empty}>{emptyMessage}</div>;
+
+  return visibleGroups.map((group) => (
+    <section className={styles.group} key={group.key}>
+      <div className={styles.groupHeader}>
+        <span>{group.label}</span>
+        <span>{group.skills.length}</span>
+      </div>
+      <div className={styles.list}>
+        {group.skills.length === 0 && (
+          <div className={styles.empty}>{group.emptyMessage ?? emptyMessage}</div>
+        )}
+        {group.skills.map((skill) => {
+          const key = updateKey(skill);
+          return (
+            <SkillListRow
+              key={skill.filePath}
+              skill={skill}
+              selected={selectedPath === skill.filePath}
+              updateAvailable={Boolean(key && updateStatuses[key]?.state === "update-available")}
+              onSelect={() => onSelect(skill)}
+              t={t}
+            />
+          );
+        })}
+      </div>
+    </section>
+  ));
+}
+
 function Toggle({
   enabled,
   loading,
+  label,
   onToggle,
 }: {
   enabled: boolean;
   loading: boolean;
+  label: string;
   onToggle: () => void;
 }) {
-  const { t } = useI18n();
   return (
     <button
-      onClick={onToggle}
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
       disabled={loading}
-      title={
-        enabled
-          ? t("i18n.visibleInPrompt")
-          : t("i18n.hiddenFromPrompt")
-      }
-      style={{
-        flexShrink: 0,
-        width: 40,
-        height: 22,
-        borderRadius: 11,
-        border: "none",
-        padding: 0,
-        cursor: loading ? "wait" : "pointer",
-        background: enabled ? "var(--accent)" : "var(--border)",
-        position: "relative",
-        transition: "background 0.18s",
-        outline: "none",
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 3,
-          left: enabled ? 21 : 3,
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          background: "var(--bg)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.22)",
-          transition: "left 0.18s cubic-bezier(.4,0,.2,1)",
-        }}
-      />
-    </button>
+      className={`${styles.switch} ${enabled ? styles.switchOn : ""}`}
+      onClick={onToggle}
+    />
   );
 }
 
 export function SkillDetail({
   skill,
   cwd,
+  mode = "manage",
   onToggle,
   toggling,
   saveError,
@@ -215,6 +220,7 @@ export function SkillDetail({
 }: {
   skill: Skill;
   cwd: string;
+  mode?: "available" | "manage";
   onToggle: (skill: Skill) => void;
   toggling: boolean;
   saveError: string | null;
@@ -229,954 +235,583 @@ export function SkillDetail({
   onUninstall: () => void;
 }) {
   const { t } = useI18n();
-  const label = sourceLabel(skill);
+  const [copied, setCopied] = useState(false);
   const enabled = !skill.disableModelInvocation;
+  const command = `/skill:${skill.name}`;
+  const scope = skillScope(skill);
+  const displayedPath = scope === "project" && skill.filePath.startsWith(cwd)
+    ? `./${skill.filePath.slice(cwd.length).replace(/^[/\\]/, "")}`
+    : shortenPath(skill.filePath);
 
-  function displayPath(p: string): string {
-    if (label === "project" && p.startsWith(cwd)) {
-      const rel = p.slice(cwd.length).replace(/^[/\\]/, "");
-      return `./${rel}`;
+  const copyCommand = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
     }
-    return shortenPath(p);
-  }
+  }, [command]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Path + tag + toggle, with a stable status row below. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span
-            style={{
-              fontSize: 10,
-              padding: "1px 5px",
-              borderRadius: 3,
-              flexShrink: 0,
-              background:
-                label === "project"
-                  ? "rgba(99,102,241,0.12)"
-                  : "rgba(120,120,120,0.12)",
-              color:
-                label === "project" ? "rgba(99,102,241,0.8)" : "var(--text-dim)",
-            }}
-          >
-            {label}
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              color: "var(--text-dim)",
-              flex: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {displayPath(skill.filePath)}
-          </span>
-          {skill.readOnly ? (
-            <span
-              title={t("i18n.builtInSceneSkill")}
-              style={{ fontSize: 10, color: "var(--text-dim)", flexShrink: 0 }}
-            >
-              {t("i18n.readOnly")}
+    <article className={styles.detail}>
+      <div className={styles.titleRow}>
+        <div>
+          <h2 className={styles.title}>{skill.name}</h2>
+          <div className={styles.badges}>
+            <span className={`${styles.badge} ${styles.badgeAccent}`}>{sourceValue(skill, t)}</span>
+            <span className={`${styles.badge} ${enabled ? "" : styles.badgeWarning}`}>
+              {enabled ? t("skills.modelCallable") : t("skills.manualOnly")}
             </span>
-          ) : (
+            {skill.builtInSceneId && <span className={styles.badge}>{t("skills.intentMatched")}</span>}
+            {skill.readOnly && <span className={styles.badge}>{t("skills.readOnly")}</span>}
+          </div>
+        </div>
+        {mode === "manage" && !skill.readOnly && (
+          <div className={styles.switchControl}>
+            <span className={styles.switchLabel}>{t("skills.allowModel")}</span>
             <Toggle
               enabled={enabled}
               loading={toggling}
+              label={t("skills.allowModel")}
               onToggle={() => onToggle(skill)}
             />
-          )}
-        </div>
-        <div
-          style={{
-            minHeight: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: 8,
-            flexWrap: "wrap",
-            textAlign: "right",
-          }}
-        >
-          {!enabled && (
-            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-              {t("i18n.hiddenButInvocable")}
-            </span>
-          )}
-          {saveError && (
-            <span style={{ fontSize: 12, color: "#f87171", overflowWrap: "anywhere" }}>
-              {saveError}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {skill.install?.skillsShUrl && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <span
-            style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
-          >
-            Source
-          </span>
-          <a
-            href={skill.install.skillsShUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={skill.install.skillsShUrl}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "fit-content",
-              maxWidth: "100%",
-              color: "var(--accent)",
-              textDecoration: "none",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 12,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {skill.install.skillsShUrl.replace(/^https?:\/\//, "")} ↗
-            </span>
-          </a>
-        </div>
-      )}
-
-      {skill.install && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-          <span
-            style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
-          >
-            Version
-          </span>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 12,
-                color: "var(--text-muted)",
-              }}
-            >
-              {shortVersion(updateStatus?.currentVersion ?? skill.install.versionHash)}
-            </span>
-            {skill.install.canCheckForUpdates && (
-              <button
-                onClick={onCheckUpdate}
-                disabled={checkingUpdate || updating}
-                style={{
-                  padding: "4px 9px",
-                  border: "1px solid var(--border)",
-                  borderRadius: 5,
-                  background: "none",
-                  color: "var(--text-muted)",
-                  cursor: checkingUpdate || updating ? "not-allowed" : "pointer",
-                  opacity: checkingUpdate || updating ? 0.5 : 1,
-                  fontSize: 11,
-                }}
-              >
-                 {t("i18n.check")}
-              </button>
-            )}
-            {updateStatus?.state === "update-available" && (
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 12,
-                  color: "#d97706",
-                }}
-              >
-                {shortVersion(updateStatus.latestVersion)}
-              </span>
-            )}
-            {(checkingUpdate ||
-              (updateStatus && updateStatus.state !== "update-available")) && (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: checkingUpdate
-                    ? "var(--accent)"
-                    : updateStatus?.state === "up-to-date"
-                      ? "#16a34a"
-                      : updateStatus?.state === "error"
-                          ? "#ef4444"
-                          : "var(--text-dim)",
-                }}
-              >
-                {checkingUpdate
-                   ? t("i18n.checking")
-                  : updateStatus?.state === "up-to-date"
-                     ? t("i18n.upToDate")
-                    : updateStatus?.state === "unsupported"
-                         ? t("i18n.automaticChecksUnavailable")
-                         : updateStatus?.message || t("i18n.checkFailed")}
-              </span>
-            )}
-            {updateStatus?.state === "update-available" && (
-              <button
-                onClick={onUpdate}
-                disabled={updating || checkingUpdate}
-                style={{
-                  padding: "4px 10px",
-                  border: "none",
-                  borderRadius: 5,
-                  background: "var(--accent)",
-                  color: "#fff",
-                  cursor: updating || checkingUpdate ? "not-allowed" : "pointer",
-                  opacity: updating || checkingUpdate ? 0.5 : 1,
-                  fontSize: 11,
-                  fontWeight: 600,
-                }}
-              >
-                 {updating ? t("i18n.updating") : t("i18n.update")}
-              </button>
-            )}
           </div>
-          {updateError && (
-            <span style={{ fontSize: 12, color: "#ef4444" }}>{updateError}</span>
+        )}
+      </div>
+
+      <p className={styles.description}>{skill.description}</p>
+      <div className={styles.codeRow}>
+        <code className={styles.code}>{command}</code>
+        <button type="button" className={styles.copyButton} onClick={() => void copyCommand()}>
+          {copied ? t("skills.copied") : t("skills.copy")}
+        </button>
+      </div>
+      <p className={styles.resultMeta}>{t("skills.manualCommandHint")}</p>
+
+      <div className={styles.info}>
+        <strong>{t("skills.whenAutomatic")}</strong>
+        <div>{t("skills.whenAutomaticBody")}</div>
+      </div>
+
+      <dl className={styles.propertyGrid}>
+        <dt>{t("skills.source")}</dt>
+        <dd>
+          {skill.install?.skillsShUrl ? (
+            <a href={skill.install.skillsShUrl} target="_blank" rel="noreferrer">{sourceValue(skill, t)}</a>
+          ) : sourceValue(skill, t)}
+        </dd>
+        <dt>{t("skills.scope")}</dt>
+        <dd>{scopeLabel(scope, t)}</dd>
+        <dt>{t("skills.invocation")}</dt>
+        <dd>{enabled ? t("skills.modelCallable") : t("skills.manualOnly")}</dd>
+        <dt>{t("skills.technicalPath")}</dt>
+        <dd><code>{displayedPath}</code></dd>
+        {skill.install && (
+          <>
+            <dt>{t("i18n.version")}</dt>
+            <dd><code>{shortVersion(updateStatus?.currentVersion ?? skill.install.versionHash)}</code></dd>
+          </>
+        )}
+      </dl>
+
+      {!enabled && <div className={styles.runtimeWarning}>{t("i18n.hiddenButInvocable")}</div>}
+      {saveError && <div className={styles.error} role="alert">{saveError}</div>}
+      {updateError && <div className={styles.error} role="alert">{updateError}</div>}
+      {uninstallError && <div className={styles.error} role="alert">{uninstallError}</div>}
+
+      {mode === "manage" && (skill.install || skill.archiveInstall) && (
+        <div className={styles.actions}>
+          {skill.install?.canCheckForUpdates && (
+            <button type="button" className={styles.secondary} disabled={checkingUpdate || updating} onClick={onCheckUpdate}>
+              {checkingUpdate ? t("i18n.checking") : t("i18n.check")}
+            </button>
+          )}
+          {updateStatus?.state === "update-available" && (
+            <button type="button" className={styles.primary} disabled={checkingUpdate || updating} onClick={onUpdate}>
+              {updating ? t("i18n.updating") : t("i18n.update")}
+            </button>
+          )}
+          {skill.archiveInstall && (
+            <button type="button" className={styles.secondary} disabled={uninstalling} onClick={onUninstall}>
+              {uninstalling ? t("i18n.uninstallingArchive") : t("i18n.uninstallArchive")}
+            </button>
           )}
         </div>
       )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span
-          style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
-        >
-          Name
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 14,
-            color: "var(--text)",
-          }}
-        >
-          {skill.name}
-        </span>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span
-          style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}
-        >
-          Description
-        </span>
-        <span
-          style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}
-        >
-          {skill.description}
-        </span>
-      </div>
-
-      {skill.archiveInstall && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            paddingTop: 14,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <button
-            onClick={onUninstall}
-            disabled={uninstalling}
-            style={{
-              padding: "5px 12px",
-              border: "1px solid rgba(239,68,68,0.45)",
-              borderRadius: 5,
-              background: "none",
-              color: "#ef4444",
-              cursor: uninstalling ? "not-allowed" : "pointer",
-              opacity: uninstalling ? 0.5 : 1,
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            {uninstalling ? t("i18n.uninstallingArchive") : t("i18n.uninstallArchive")}
-          </button>
-          {uninstallError && (
-            <span style={{ fontSize: 12, color: "#ef4444" }}>{uninstallError}</span>
-          )}
-        </div>
-      )}
-    </div>
+    </article>
   );
+}
+
+function ScopeOptions({
+  scope,
+  projectResourcesLoaded,
+  onChange,
+  t,
+}: {
+  scope: SkillInstallScope;
+  projectResourcesLoaded: boolean;
+  onChange: (scope: SkillInstallScope) => void;
+  t: Translate;
+}) {
+  return (
+    <fieldset className={styles.scopeGroup}>
+      <legend>{t("skills.installDestination")}</legend>
+      <div className={styles.scopeOptions}>
+        <label className={`${styles.scopeOption} ${scope === "project" ? styles.scopeOptionSelected : ""}`}>
+          <input
+            type="radio"
+            name="skill-scope"
+            value="project"
+            checked={scope === "project"}
+            disabled={!projectResourcesLoaded}
+            onChange={() => onChange("project")}
+          />
+          <span>
+            <strong>{t("skills.projectScope")} · {t("skills.recommended")}</strong>
+            <small>{t("skills.projectScopeDescription")}</small>
+          </span>
+        </label>
+        <label className={`${styles.scopeOption} ${scope === "global" ? styles.scopeOptionSelected : ""}`}>
+          <input
+            type="radio"
+            name="skill-scope"
+            value="global"
+            checked={scope === "global"}
+            onChange={() => onChange("global")}
+          />
+          <span>
+            <strong>{t("skills.globalScope")}</strong>
+            <small>{t("skills.globalScopeDescription")}</small>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+
+function packageParts(pkg: string): { name: string; repository: string } {
+  const atIndex = pkg.lastIndexOf("@");
+  if (atIndex > 0) return { name: pkg.slice(atIndex + 1), repository: pkg.slice(0, atIndex) };
+  const parts = pkg.split("/");
+  return { name: parts.at(-1) ?? pkg, repository: pkg };
 }
 
 export function AddSkillPanel({
   cwd,
   installedPackages,
   projectResourcesLoaded,
+  initialSource = "market",
   onInstalled,
 }: {
   cwd: string;
   installedPackages: Record<SkillInstallScope, ReadonlySet<string>>;
   projectResourcesLoaded: boolean;
+  initialSource?: AddSource;
   onInstalled: () => void;
 }) {
   const { t } = useI18n();
+  const [source, setSource] = useState<AddSource>(initialSource);
+  const [scope, setScope] = useState<SkillInstallScope>(projectResourcesLoaded ? "project" : "global");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SkillSearchResult[]>([]);
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [installing, setInstalling] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [newlyInstalled, setNewlyInstalled] = useState<Set<string>>(new Set());
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadDragActive, setUploadDragActive] = useState(false);
-  const [newlyInstalledPkgs, setNewlyInstalledPkgs] = useState<Set<string>>(
-    new Set(),
-  );
-  const [scope, setScope] = useState<"global" | "project">("global");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [inspection, setInspection] = useState<SkillArchiveInspection | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const [trustAcknowledged, setTrustAcknowledged] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const uploadDragCounterRef = useRef(0);
+  const searchSequenceRef = useRef(0);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (!projectResourcesLoaded && scope === "project") setScope("global");
+  }, [projectResourcesLoaded, scope]);
 
-  const search = useCallback(async (q: string) => {
-    if (!q.trim()) return;
+  useEffect(() => {
+    if (source === "market") searchInputRef.current?.focus();
+  }, [source]);
+
+  const search = useCallback(async (rawQuery: string) => {
+    const trimmed = rawQuery.trim();
+    if (!trimmed) return;
+    const sequence = ++searchSequenceRef.current;
     setSearching(true);
     setSearchError(null);
-    setResults([]);
+    setInstallError(null);
     try {
-      const res = await fetch("/api/skills/search", {
+      const response = await fetch("/api/skills/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q.trim() }),
+        body: JSON.stringify({ query: trimmed }),
       });
-      const d = (await res.json()) as {
-        results?: SkillSearchResult[];
-        error?: string;
-      };
-      if (d.error) {
-        setSearchError(d.error);
-        return;
+      const data = await response.json() as { results?: SkillSearchResult[]; error?: string };
+      if (sequence !== searchSequenceRef.current) return;
+      if (!response.ok || data.error) throw new Error(data.error ?? `HTTP ${response.status}`);
+      const nextResults = data.results ?? [];
+      setResults(nextResults);
+      setSelectedPackage(nextResults[0]?.package ?? null);
+      if (nextResults.length === 0) setSearchError(t("i18n.noSkills"));
+    } catch (error) {
+      if (sequence === searchSequenceRef.current) {
+        setSearchError(error instanceof Error ? error.message : String(error));
       }
-      setResults(d.results ?? []);
-      if ((d.results ?? []).length === 0) setSearchError(t("i18n.noSkills"));
-    } catch (e) {
-      setSearchError(String(e));
     } finally {
-      setSearching(false);
+      if (sequence === searchSequenceRef.current) setSearching(false);
     }
   }, [t]);
 
-  const install = useCallback(
-    async (pkg: string) => {
-      setInstalling(pkg);
-      setInstallError(null);
-      try {
-        const res = await fetch("/api/skills/install", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ package: pkg, scope, cwd }),
-        });
-        const d = (await res.json()) as { success?: boolean; error?: string };
-        if (!res.ok || d.error) {
-          setInstallError(d.error ?? `HTTP ${res.status}`);
-          return;
-        }
-        setNewlyInstalledPkgs((prev) =>
-          new Set(prev).add(`${scope}:${pkg}`),
-        );
-        onInstalled();
-      } catch (e) {
-        setInstallError(String(e));
-      } finally {
-        setInstalling(null);
-      }
-    },
-    [onInstalled, scope, cwd],
-  );
-
-  const uploadArchive = useCallback(async () => {
-    if (!uploadFile) return;
-    setUploading(true);
-    setUploadError(null);
-    setUploadMessage(null);
+  const installMarketSkill = useCallback(async (pkg: string) => {
+    setInstalling(true);
+    setInstallError(null);
+    setInstallMessage(null);
     try {
-      const form = new FormData();
-      form.set("file", uploadFile);
-      form.set("scope", scope);
-      form.set("cwd", cwd);
-      const res = await fetch("/api/skills/upload", { method: "POST", body: form });
-      const data = await res.json() as {
-        error?: string;
-        skillName?: string;
-        kind?: "skill" | "integration";
-      };
-      if (!res.ok || data.error) {
-        setUploadError(data.error ?? `HTTP ${res.status}`);
-        return;
-      }
-      setUploadMessage(t(
-        data.kind === "integration" ? "i18n.skillIntegrationInstalled" : "i18n.skillZipInstalled",
-        { name: data.skillName ?? uploadFile.name },
-      ));
-      setUploadFile(null);
-      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      const response = await fetch("/api/skills/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ package: pkg, scope, cwd }),
+      });
+      const data = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || data.error || !data.success) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setNewlyInstalled((current) => new Set(current).add(`${scope}:${pkg}`));
+      setInstallMessage(t("skills.installedSuccess", { name: packageParts(pkg).name }));
       onInstalled();
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : String(error));
+      setInstallError(error instanceof Error ? error.message : String(error));
     } finally {
-      setUploading(false);
+      setInstalling(false);
     }
-  }, [cwd, onInstalled, scope, t, uploadFile]);
+  }, [cwd, onInstalled, scope, t]);
+
+  const inspectArchive = useCallback(async (file: File, nextScope: SkillInstallScope) => {
+    setInspecting(true);
+    setInspection(null);
+    setTrustAcknowledged(false);
+    setInstallError(null);
+    setInstallMessage(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("cwd", cwd);
+      form.append("scope", nextScope);
+      const response = await fetch("/api/skills/upload/inspect", { method: "POST", body: form });
+      const data = await response.json() as { inspection?: SkillArchiveInspection; error?: string };
+      if (!response.ok || data.error || !data.inspection) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setInspection(data.inspection);
+    } catch (error) {
+      setInstallError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInspecting(false);
+    }
+  }, [cwd]);
 
   const selectUploadFile = useCallback((file: File | null) => {
-    setUploadMessage(null);
-    setUploadError(null);
-    if (file && !file.name.toLowerCase().endsWith(".zip")) {
-      setUploadFile(null);
-      setUploadError(t("i18n.skillZipOnly"));
-      if (uploadInputRef.current) uploadInputRef.current.value = "";
-      return;
-    }
     setUploadFile(file);
-  }, [t]);
-
-  const handleUploadDragEnter = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
-    if (uploading) return;
-    event.preventDefault();
-    uploadDragCounterRef.current += 1;
-    setUploadDragActive(true);
-  }, [uploading]);
-
-  const handleUploadDragOver = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
-    if (uploading) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, [uploading]);
-
-  const handleUploadDragLeave = useCallback(() => {
-    uploadDragCounterRef.current = Math.max(0, uploadDragCounterRef.current - 1);
-    if (uploadDragCounterRef.current === 0) setUploadDragActive(false);
-  }, []);
-
-  const handleUploadDrop = useCallback((event: React.DragEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    uploadDragCounterRef.current = 0;
-    setUploadDragActive(false);
-    if (uploading) return;
-    const files = Array.from(event.dataTransfer.files);
-    if (files.length !== 1) {
-      setUploadFile(null);
-      setUploadMessage(null);
-      setUploadError(t("i18n.skillZipSingle"));
-      if (uploadInputRef.current) uploadInputRef.current.value = "";
+    setInspection(null);
+    setTrustAcknowledged(false);
+    setInstallError(null);
+    setInstallMessage(null);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setInstallError(t("i18n.skillZipOnly"));
       return;
     }
-    selectUploadFile(files[0]);
-  }, [selectUploadFile, t, uploading]);
+    void inspectArchive(file, scope);
+  }, [inspectArchive, scope, t]);
 
-  const installPath =
-    scope === "global"
-      ? "~/.pi/agent/skills/"
-      : `${shortenPath(cwd)}/.pi/skills/`;
+  const changeScope = useCallback((nextScope: SkillInstallScope) => {
+    setScope(nextScope);
+    setTrustAcknowledged(false);
+    setInstallError(null);
+    setInstallMessage(null);
+    if (source === "zip" && uploadFile) void inspectArchive(uploadFile, nextScope);
+  }, [inspectArchive, source, uploadFile]);
+
+  const installArchive = useCallback(async () => {
+    if (!uploadFile || !inspection || !trustAcknowledged) return;
+    setInstalling(true);
+    setInstallError(null);
+    setInstallMessage(null);
+    try {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      form.append("scope", scope);
+      form.append("cwd", cwd);
+      form.append("expectedSha256", inspection.sha256);
+      form.append("riskAcknowledged", "true");
+      const response = await fetch("/api/skills/upload", { method: "POST", body: form });
+      const data = await response.json() as {
+        success?: boolean;
+        skill?: { name?: string };
+        skillName?: string;
+        error?: string;
+      };
+      if (!response.ok || data.error || !data.success) throw new Error(data.error ?? `HTTP ${response.status}`);
+      const name = data.skill?.name ?? data.skillName ?? inspection.skill.name;
+      setInstallMessage(t("skills.installedSuccess", { name }));
+      onInstalled();
+    } catch (error) {
+      setInstallError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInstalling(false);
+    }
+  }, [cwd, inspection, onInstalled, scope, t, trustAcknowledged, uploadFile]);
+
+  const selectedResult = results.find((result) => result.package === selectedPackage) ?? null;
+  const selectedParts = selectedResult ? packageParts(selectedResult.package) : null;
+  const installedHere = Boolean(selectedResult && (
+    installedPackages[scope].has(selectedResult.package) || newlyInstalled.has(`${scope}:${selectedResult.package}`)
+  ));
+  const otherScope: SkillInstallScope = scope === "project" ? "global" : "project";
+  const installedElsewhere = Boolean(selectedResult && (
+    installedPackages[otherScope].has(selectedResult.package) || newlyInstalled.has(`${otherScope}:${selectedResult.package}`)
+  ));
+  const destination = scope === "project" ? `${shortenPath(cwd)}/.pi/skills` : "~/.pi/agent/skills";
+  const riskCopy = inspection?.risk === "integration-runtime"
+    ? t("skills.archiveRiskIntegration")
+    : inspection?.risk === "supporting-files"
+      ? t("skills.archiveRiskSupporting")
+      : t("skills.archiveRiskInstructions");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* ── Header area ── */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-           {t("i18n.addSkill")}
-        </div>
-
-        {/* Search row */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") search(query);
-            }}
-             placeholder={t("i18n.skillSearchPlaceholder")}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              fontSize: 13,
-              background: "var(--bg-panel)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              color: "var(--text)",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={() => search(query)}
-            disabled={searching || !query.trim()}
-            style={{
-              padding: "7px 16px",
-              fontSize: 13,
-              borderRadius: 6,
-              border: "none",
-              background: "var(--accent)",
-              color: "#fff",
-              cursor: searching || !query.trim() ? "not-allowed" : "pointer",
-              opacity: searching || !query.trim() ? 0.5 : 1,
-              flexShrink: 0,
-            }}
-          >
-             {searching ? t("i18n.searching") : t("i18n.search")}
-          </button>
-        </div>
-
-        {/* Scope + install path row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              display: "flex",
-              borderRadius: 5,
-              border: "1px solid var(--border)",
-              overflow: "hidden",
-              fontSize: 12,
-              flexShrink: 0,
-            }}
-          >
-            {(["global", "project"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  if (s === "global" || projectResourcesLoaded) setScope(s);
-                }}
-                disabled={s === "project" && !projectResourcesLoaded}
-                title={s === "project" && !projectResourcesLoaded ? t("trust.projectScopeUnavailable") : undefined}
-                style={{
-                  padding: "3px 10px",
-                  border: "none",
-                  cursor: s === "project" && !projectResourcesLoaded ? "not-allowed" : "pointer",
-                  background: scope === s ? "var(--bg-selected)" : "none",
-                  color: scope === s ? "var(--text)" : "var(--text-dim)",
-                  fontWeight: scope === s ? 600 : 400,
-                  opacity: s === "project" && !projectResourcesLoaded ? 0.45 : 1,
-                  borderRight:
-                    s === "global" ? "1px solid var(--border)" : "none",
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          <span
-            style={{
-              fontSize: 12,
-              color: "var(--text-dim)",
-              fontFamily: "var(--font-mono)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            → {installPath}
-          </span>
-        </div>
-
-        <div
-          style={{
-            padding: 14,
-            border: "1px solid var(--border)",
-            borderRadius: 9,
-            background: "var(--bg-panel)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              aria-hidden="true"
-              style={{
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: "rgba(99,102,241,0.12)",
-                color: "var(--accent)",
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-              }}
-            >
-              ZIP
-            </span>
-            <div style={{ fontSize: 13, fontWeight: 650, color: "var(--text)" }}>
-              {t("i18n.installFromZip")}
-            </div>
-          </div>
-
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept=".zip,application/zip"
-            disabled={uploading}
-            onChange={(event) => selectUploadFile(event.target.files?.[0] ?? null)}
-            hidden
-          />
+    <div className={styles.addLayout}>
+      <div className={styles.addToolbar}>
+        <div className={styles.segments} role="tablist" aria-label={t("skills.add")}>
           <button
             type="button"
-            onClick={() => uploadInputRef.current?.click()}
-            onDragEnter={handleUploadDragEnter}
-            onDragOver={handleUploadDragOver}
-            onDragLeave={handleUploadDragLeave}
-            onDrop={handleUploadDrop}
-            disabled={uploading}
-            aria-label={uploadFile ? `${t("i18n.replaceSkillZip")}: ${uploadFile.name}` : t("i18n.chooseSkillZip")}
-            style={{
-              width: "100%",
-              minHeight: 88,
-              padding: "14px 16px",
-              border: uploadDragActive
-                ? "1.5px solid var(--accent)"
-                : uploadFile
-                  ? "1px solid rgba(99,102,241,0.5)"
-                  : "1px dashed var(--border)",
-              borderRadius: 8,
-              background: uploadDragActive
-                ? "rgba(99,102,241,0.12)"
-                : uploadFile
-                  ? "rgba(99,102,241,0.06)"
-                  : "var(--bg)",
-              color: "var(--text)",
-              cursor: uploading ? "wait" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: uploadFile ? "flex-start" : "center",
-              gap: 12,
-              textAlign: "left",
-              transition: "border-color 0.15s, background 0.15s, transform 0.15s",
-            }}
+            role="tab"
+            aria-selected={source === "market"}
+            className={`${styles.segment} ${source === "market" ? styles.segmentActive : ""}`}
+            onClick={() => setSource("market")}
           >
-            <span
-              aria-hidden="true"
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                background: uploadFile || uploadDragActive
-                  ? "rgba(99,102,241,0.14)"
-                  : "var(--bg-hover)",
-                color: uploadFile || uploadDragActive ? "var(--accent)" : "var(--text-muted)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              {uploadFile ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 2h9l4 4v16H6z" />
-                  <path d="M14 2v5h5M9 13h6M9 17h6" />
-                </svg>
-              ) : (
-                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" />
-                  <path d="M5 13v6h14v-6" />
-                </svg>
-              )}
-            </span>
-
-            {uploadFile ? (
-              <>
-                <span style={{ flex: 1, minWidth: 0 }} aria-live="polite">
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {uploadFile.name}
-                  </span>
-                  <span style={{ display: "block", marginTop: 3, fontSize: 11, color: "var(--text-dim)" }}>
-                    {t("i18n.skillZipSelected", { size: formatArchiveSize(uploadFile.size) })}
-                  </span>
-                </span>
-                <span
-                  style={{
-                    flexShrink: 0,
-                    padding: "4px 8px",
-                    borderRadius: 5,
-                    background: "var(--bg-hover)",
-                    color: "var(--text-muted)",
-                    fontSize: 11,
-                    fontWeight: 500,
-                  }}
-                >
-                  {t("i18n.replaceSkillZip")}
-                </span>
-              </>
-            ) : (
-              <span>
-                <span style={{ display: "block", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
-                  {t("i18n.chooseSkillZip")}
-                </span>
-                <span style={{ display: "block", marginTop: 3, fontSize: 11, color: "var(--text-dim)", textAlign: "center" }}>
-                  {t("i18n.dropSkillZip")}
-                </span>
-              </span>
-            )}
+            {t("skills.market")}
           </button>
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-              {t("i18n.skillZipFileRules", { size: MAX_SKILL_ARCHIVE_LABEL })}
-            </span>
-            <button
-              type="button"
-              onClick={uploadArchive}
-              disabled={!uploadFile || uploading || installing !== null}
-              style={{
-                minWidth: 126,
-                padding: "7px 14px",
-                border: "none",
-                borderRadius: 6,
-                background: "var(--accent)",
-                color: "#fff",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: !uploadFile || uploading || installing !== null ? "not-allowed" : "pointer",
-                opacity: !uploadFile || uploading || installing !== null ? 0.5 : 1,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-              }}
-            >
-              {uploading && (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }} aria-hidden="true">
-                  <path d="M21 12a9 9 0 1 1-6.2-8.6" />
-                </svg>
-              )}
-              {uploading
-                ? t("i18n.uploadingSkillZip")
-                : uploadFile
-                  ? t("i18n.installZip")
-                  : t("i18n.selectZipBeforeInstall")}
-            </button>
-          </div>
-
-          {uploadError && (
-            <div
-              role="alert"
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 7,
-                padding: "7px 9px",
-                borderRadius: 6,
-                background: "rgba(239,68,68,0.08)",
-                color: "#ef4444",
-                fontSize: 11,
-                lineHeight: 1.5,
-                wordBreak: "break-word",
-              }}
-            >
-              <span aria-hidden="true">!</span>
-              <span>{uploadError}</span>
-            </div>
-          )}
-          {uploadMessage && (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 7,
-                padding: "7px 9px",
-                borderRadius: 6,
-                background: "rgba(34,197,94,0.09)",
-                color: "#16a34a",
-                fontSize: 11,
-                lineHeight: 1.5,
-              }}
-            >
-              <span aria-hidden="true">✓</span>
-              <span>{uploadMessage}</span>
-            </div>
-          )}
-
-          <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.55 }}>
-            {t("i18n.skillZipHint")}
-          </div>
-          <div style={{ fontSize: 11, color: "#d97706", lineHeight: 1.55 }}>
-            {t("i18n.skillZipTrustWarning")}
-          </div>
-        </div>
-
-        {/* Errors */}
-        {searchError && (
-          <div style={{ fontSize: 12, color: "#f87171" }}>{searchError}</div>
-        )}
-        {installError && (
-          <div
-            style={{ fontSize: 12, color: "#f87171", wordBreak: "break-word" }}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={source === "zip"}
+            className={`${styles.segment} ${source === "zip" ? styles.segmentActive : ""}`}
+            onClick={() => setSource("zip")}
           >
-            {installError}
-          </div>
-        )}
+            {t("skills.localZip")}
+          </button>
+        </div>
+        <span className={styles.toolbarHelp}>{t("skills.addHelp")}</span>
       </div>
 
-      {/* ── Results list ── */}
-      {results.length > 0 ? (
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {results.map((r) => {
-            const isInstalled =
-              installedPackages[scope].has(r.package) ||
-              newlyInstalledPkgs.has(`${scope}:${r.package}`);
-            const isInstalling = installing === r.package;
-            // split "owner/repo@skill" for cleaner display
-            const atIdx = r.package.indexOf("@");
-            const repopart = atIdx > -1 ? r.package.slice(0, atIdx) : r.package;
-            const skillpart = atIdx > -1 ? r.package.slice(atIdx + 1) : null;
-            return (
-              <div
-                key={r.package}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "12px 0",
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {/* skill name prominent */}
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "var(--text)",
-                      marginBottom: 3,
-                    }}
-                  >
-                    {skillpart ?? repopart}
-                  </div>
-                  {/* repo + installs + link row */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 11,
-                        color: "var(--text-dim)",
-                      }}
-                    >
-                      {repopart}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "var(--text-muted)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {r.installs}
-                    </span>
-                    {r.url && (
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          fontSize: 12,
-                          color: "var(--accent)",
-                          textDecoration: "none",
-                        }}
-                      >
-                        skills.sh ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
+      {source === "market" ? (
+        <div className={styles.marketGrid} role="tabpanel">
+          <div className={styles.results}>
+            <form onSubmit={(event) => { event.preventDefault(); void search(query); }}>
+              <input
+                ref={searchInputRef}
+                className={styles.search}
+                value={query}
+                aria-label={t("skills.marketPlaceholder")}
+                placeholder={t("skills.marketPlaceholder")}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <button type="submit" className={styles.secondary} disabled={searching || !query.trim()}>
+                {searching ? t("i18n.searching") : t("i18n.search")}
+              </button>
+            </form>
+            {searching && <div className={styles.empty} role="status">{t("i18n.searching")}</div>}
+            {!searching && results.length > 0 && (
+              <p className={styles.resultMeta}>{t("skills.resultCount", { count: results.length })}</p>
+            )}
+            {!searching && results.map((result) => {
+              const parts = packageParts(result.package);
+              const selected = result.package === selectedPackage;
+              return (
                 <button
-                  onClick={() =>
-                    !isInstalled && !isInstalling && install(r.package)
-                  }
-                  disabled={isInstalled || isInstalling || installing !== null}
-                  style={{
-                    flexShrink: 0,
-                    padding: "5px 14px",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    borderRadius: 5,
-                    border: "1px solid var(--border)",
-                    cursor:
-                      isInstalled || isInstalling || installing !== null
-                        ? "not-allowed"
-                        : "pointer",
-                    background: isInstalled ? "rgba(34,197,94,0.1)" : "none",
-                    color: isInstalled
-                      ? "#16a34a"
-                      : isInstalling
-                        ? "var(--accent)"
-                        : "var(--text-muted)",
-                    transition: "color 0.12s",
-                  }}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className={`${styles.result} ${selected ? styles.resultSelected : ""}`}
+                  key={result.package}
+                  onClick={() => setSelectedPackage(result.package)}
                 >
-                  {isInstalled
-                     ? `✓ ${t("i18n.installed")}`
-                    : isInstalling
-                       ? t("i18n.installing")
-                       : t("i18n.install")}
+                  <span>{parts.name}</span>
+                  <span>{parts.repository} · {result.installs}</span>
                 </button>
-              </div>
-            );
-          })}
+              );
+            })}
+            {!searching && results.length === 0 && !searchError && (
+              <p className={styles.empty}>
+                {t("i18n.skillCatalogBefore")}
+                <a href="https://skills.sh/" target="_blank" rel="noreferrer">skills.sh</a>
+                {t("i18n.skillCatalogAfter")}
+              </p>
+            )}
+            {searchError && <div className={styles.error} role="alert">{searchError}</div>}
+          </div>
+
+          <div className={styles.addPane}>
+            {selectedResult && selectedParts ? (
+              <>
+                <div className={styles.titleRow}>
+                  <div>
+                    <h2 className={styles.title}>{selectedParts.name}</h2>
+                    <p className={styles.resultMeta}>{selectedParts.repository}</p>
+                  </div>
+                  {selectedResult.url && (
+                    <a href={selectedResult.url} target="_blank" rel="noreferrer">skills.sh</a>
+                  )}
+                </div>
+                <ScopeOptions
+                  scope={scope}
+                  projectResourcesLoaded={projectResourcesLoaded}
+                  onChange={changeScope}
+                  t={t}
+                />
+                {installedElsewhere && !installedHere && (
+                  <div className={styles.runtimeWarning}>{t("skills.installedElsewhere")}</div>
+                )}
+                <div className={styles.installSummary}>
+                  <p>{t("skills.installDestination")}: <code>{destination}</code></p>
+                  <button
+                    type="button"
+                    className={styles.primary}
+                    disabled={installing || installedHere}
+                    onClick={() => void installMarketSkill(selectedResult.package)}
+                  >
+                    {installedHere
+                      ? t("skills.alreadyInstalledHere")
+                      : installing
+                        ? t("skills.installing")
+                        : scope === "project"
+                          ? t("skills.installProjectCopy")
+                          : t("skills.installGlobal")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className={styles.empty}>{t("skills.selectMarketSkill")}</div>
+            )}
+            {installError && <div className={styles.error} role="alert">{installError}</div>}
+            {installMessage && <div className={styles.success} role="status">{installMessage}</div>}
+          </div>
         </div>
       ) : (
-        !searchError &&
-        !searching && (
-          <div
-            style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.8 }}
-          >
-            {t("i18n.skillCatalogBefore")}
-            <a
-              href="https://skills.sh/"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "var(--accent)", textDecoration: "none" }}
+        <div className={styles.zipGrid} role="tabpanel">
+          <div className={styles.zipLeft}>
+            <input
+              ref={uploadInputRef}
+              hidden
+              type="file"
+              accept=".zip,application/zip"
+              onChange={(event) => selectUploadFile(event.target.files?.[0] ?? null)}
+            />
+            <button
+              type="button"
+              className={styles.dropZone}
+              onClick={() => uploadInputRef.current?.click()}
+              onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragActive(false);
+                const files = [...event.dataTransfer.files];
+                if (files.length !== 1) {
+                  setInstallError(t("i18n.skillZipSingle"));
+                  return;
+                }
+                selectUploadFile(files[0]);
+              }}
             >
-              skills.sh
-            </a>
-            {t("i18n.skillCatalogAfter")}
+              <strong>{uploadFile ? t("skills.replaceZip") : t("skills.chooseZip")}</strong>
+              <span>{dragActive ? t("skills.chooseZip") : t("skills.dropZip")}</span>
+            </button>
+            <div className={styles.fileMeta}>
+              <span>{uploadFile?.name ?? `.zip · ${MAX_SKILL_ARCHIVE_LABEL}`}</span>
+              <span>{uploadFile ? formatArchiveSize(uploadFile.size) : ""}</span>
+            </div>
+            {inspecting && <div className={styles.checkCard} role="status">{t("skills.archiveInspecting")}</div>}
+            {inspection && (
+              <>
+                <div className={styles.checkCard}>
+                  <strong>{t("skills.archiveStructurePassed")}</strong>
+                  <span>
+                    {t("skills.archiveFileCount", { count: inspection.archive.fileCount })} · {t("skills.skillFileCount", { count: inspection.skill.fileCount })}
+                  </span>
+                </div>
+                <div className={styles.checkCard}>
+                  <strong>{t("skills.archiveIntegrityPassed")}</strong>
+                  <span>{inspection.sha256.slice(0, 16)}… · {formatArchiveSize(inspection.archive.expandedBytes)}</span>
+                </div>
+              </>
+            )}
+            {installError && <div className={styles.error} role="alert">{installError}</div>}
+            {installMessage && <div className={styles.success} role="status">{installMessage}</div>}
           </div>
-        )
+
+          <div className={styles.addPane}>
+            {inspection ? (
+              <>
+                <div className={styles.titleRow}>
+                  <div>
+                    <h2 className={styles.title}>{inspection.skill.name}</h2>
+                    <p className={styles.description}>{inspection.skill.description}</p>
+                  </div>
+                  <span className={`${styles.badge} ${inspection.risk === "instructions-only" ? "" : styles.badgeWarning}`}>
+                    {inspection.kind === "integration" ? "Integration" : "Skill"}
+                  </span>
+                </div>
+                <div className={styles.riskCard} id="skill-archive-risk">
+                  <h3>{t("skills.archiveRiskTitle")}</h3>
+                  <p>{riskCopy}</p>
+                  {inspection.integration?.mcp && (
+                    <ul className={styles.riskList}>
+                      <li>{t("skills.mcpServer")}: {inspection.integration.mcp.serverName}</li>
+                      <li>{t("skills.executable")}: {inspection.integration.mcp.executable}</li>
+                      <li>{t("skills.requiredTools")}: {inspection.integration.mcp.requiredTools.join(", ") || t("skills.noneDeclared")}</li>
+                      <li>{t("skills.environmentNames")}: {inspection.integration.mcp.environmentNames.join(", ") || t("skills.noneDeclared")}</li>
+                    </ul>
+                  )}
+                </div>
+                <ScopeOptions
+                  scope={scope}
+                  projectResourcesLoaded={projectResourcesLoaded}
+                  onChange={changeScope}
+                  t={t}
+                />
+                <label className={styles.trustCheck}>
+                  <input
+                    type="checkbox"
+                    checked={trustAcknowledged}
+                    aria-describedby="skill-archive-risk skill-archive-trust-detail"
+                    onChange={(event) => setTrustAcknowledged(event.target.checked)}
+                  />
+                  <span>
+                    <strong>{t("skills.trustArchive")}</strong>
+                    <small id="skill-archive-trust-detail">{t("skills.trustArchiveBody")}</small>
+                  </span>
+                </label>
+                <div className={styles.installSummary}>
+                  <p>{t("skills.installDestination")}: <code>{destination}</code></p>
+                  <button
+                    type="button"
+                    className={styles.primary}
+                    disabled={installing || inspecting || !trustAcknowledged}
+                    onClick={() => void installArchive()}
+                  >
+                    {installing ? t("skills.installing") : t("skills.confirmInstall")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className={styles.empty}>{t("i18n.skillZipHint")}</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1193,15 +828,19 @@ export function SkillsConfig({
   onClose: () => void;
   onResourcesChanged?: () => void;
 }) {
-  const isMobile = useIsMobile();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const [view, setView] = useState<SkillView>("available");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [projectResourcesLoaded, setProjectResourcesLoaded] = useState(true);
+  const [availableQuery, setAvailableQuery] = useState("");
+  const [manageQuery, setManageQuery] = useState("");
+  const [manageFilter, setManageFilter] = useState<ManageFilter>("all");
+  const [selectedAvailable, setSelectedAvailable] = useState<string | null>(null);
+  const [selectedManage, setSelectedManage] = useState<string | null>(null);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [addMode, setAddMode] = useState(false);
   const [updateStatuses, setUpdateStatuses] = useState<Record<string, SkillUpdateResult>>({});
   const [checkingUpdates, setCheckingUpdates] = useState<Set<string>>(new Set());
   const [checkingAll, setCheckingAll] = useState(false);
@@ -1209,8 +848,21 @@ export function SkillsConfig({
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [uninstallingArchive, setUninstallingArchive] = useState<string | null>(null);
   const [archiveUninstallError, setArchiveUninstallError] = useState<string | null>(null);
-  const [projectResourcesLoaded, setProjectResourcesLoaded] = useState(true);
-  const [dormantGroupsOpen, setDormantGroupsOpen] = useState<Record<string, boolean>>({});
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      dialogRef.current?.querySelector<HTMLElement>("[role='tab'][aria-selected='true']")?.focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(focusTimer);
+      previousFocus?.focus();
+    };
+  }, []);
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -1218,27 +870,22 @@ export function SkillsConfig({
     try {
       const query = new URLSearchParams({ cwd });
       if (sceneId) query.set("sceneId", sceneId);
-      const res = await fetch(`/api/skills?${query.toString()}`);
-      const d = (await res.json()) as Partial<SkillsResponse> & { error?: string };
-      if (!res.ok || d.error) throw new Error(d.error ?? `HTTP ${res.status}`);
-      const list = d.skills ?? [];
+      const response = await fetch(`/api/skills?${query.toString()}`);
+      const data = await response.json() as Partial<SkillsResponse> & { error?: string };
+      if (!response.ok || data.error) throw new Error(data.error ?? `HTTP ${response.status}`);
+      const list = sortSkills(data.skills ?? []);
       setSkills(list);
-      setProjectResourcesLoaded(d.projectResourcesLoaded ?? true);
-      setSelected((current) => {
-        if (current && list.some((skill) => skill.filePath === current)) return current;
-        const initialSkill = list.find((skill) => !skill.disableModelInvocation) ?? list[0];
-        if (initialSkill?.disableModelInvocation) {
-          setDormantGroupsOpen((openGroups) => ({
-            ...openGroups,
-            [skillGroupLabel(initialSkill)]: true,
-          }));
-        }
-        return initialSkill?.filePath ?? null;
-      });
-      if (list.length === 0) setAddMode(true);
+      setProjectResourcesLoaded(data.projectResourcesLoaded ?? true);
+      setSelectedAvailable((current) => list.some((skill) => skill.filePath === current)
+        ? current
+        : (list.find((skill) => Boolean(skill.builtInSceneId)) ?? list[0])?.filePath ?? null);
+      const manageable = list.filter((skill) => !skill.builtInSceneId);
+      setSelectedManage((current) => manageable.some((skill) => skill.filePath === current)
+        ? current
+        : manageable[0]?.filePath ?? null);
       return list;
-    } catch (e) {
-      setError(String(e));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
       return [];
     } finally {
       setLoading(false);
@@ -1249,22 +896,45 @@ export function SkillsConfig({
     setUpdateStatuses({});
     setUpdateError(null);
     void loadSkills();
-  }, [cwd, sceneId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadSkills]);
+
+  const toggle = useCallback(async (skill: Skill) => {
+    if (skill.readOnly) return;
+    const disableModelInvocation = !skill.disableModelInvocation;
+    setToggling((current) => new Set(current).add(skill.filePath));
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/skills", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filePath: skill.filePath, disableModelInvocation }),
+      });
+      const data = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || data.error || !data.success) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setSkills((current) => current.map((item) => item.filePath === skill.filePath
+        ? { ...item, disableModelInvocation }
+        : item));
+      onResourcesChanged?.();
+    } catch (toggleError) {
+      setSaveError(toggleError instanceof Error ? toggleError.message : String(toggleError));
+    } finally {
+      setToggling((current) => {
+        const next = new Set(current);
+        next.delete(skill.filePath);
+        return next;
+      });
+    }
+  }, [onResourcesChanged]);
 
   const checkForUpdates = useCallback(async (skill?: Skill) => {
-    const targets = skill
-      ? [skill]
-      : skills.filter((item) => Boolean(item.install));
-    const keys = targets
-      .map(updateKey)
-      .filter((key): key is string => Boolean(key));
+    const targets = skill ? [skill] : skills.filter((item) => Boolean(item.install));
+    const keys = targets.map(updateKey).filter((key): key is string => Boolean(key));
     if (keys.length === 0) return;
-
     setUpdateError(null);
     setCheckingUpdates((current) => new Set([...current, ...keys]));
     if (!skill) setCheckingAll(true);
     try {
-      const res = await fetch("/api/skills/check", {
+      const response = await fetch("/api/skills/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1273,24 +943,19 @@ export function SkillsConfig({
           scope: skill?.install?.scope,
         }),
       });
-      const data = (await res.json()) as {
-        updates?: SkillUpdateResult[];
-        error?: string;
-      };
-      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const data = await response.json() as { updates?: SkillUpdateResult[]; error?: string };
+      if (!response.ok || data.error) throw new Error(data.error ?? `HTTP ${response.status}`);
       setUpdateStatuses((current) => {
         const next = { ...current };
-        for (const update of data.updates ?? []) {
-          next[`${update.scope}\0${update.package}`] = update;
-        }
+        for (const update of data.updates ?? []) next[`${update.scope}\0${update.package}`] = update;
         return next;
       });
-    } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
+    } catch (checkError) {
+      setUpdateError(checkError instanceof Error ? checkError.message : String(checkError));
     } finally {
       setCheckingUpdates((current) => {
         const next = new Set(current);
-        for (const key of keys) next.delete(key);
+        keys.forEach((key) => next.delete(key));
         return next;
       });
       if (!skill) setCheckingAll(false);
@@ -1303,23 +968,13 @@ export function SkillsConfig({
     setUpdatingSkill(key);
     setUpdateError(null);
     try {
-      const res = await fetch("/api/skills/update", {
+      const response = await fetch("/api/skills/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cwd,
-          package: skill.install.package,
-          scope: skill.install.scope,
-        }),
+        body: JSON.stringify({ cwd, package: skill.install.package, scope: skill.install.scope }),
       });
-      const data = (await res.json()) as {
-        success?: boolean;
-        skill?: Skill;
-        error?: string;
-      };
-      if (!res.ok || data.error || !data.success) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
-      }
+      const data = await response.json() as { success?: boolean; skill?: Skill; error?: string };
+      if (!response.ok || data.error || !data.success) throw new Error(data.error ?? `HTTP ${response.status}`);
       await loadSkills();
       const versionHash = data.skill?.install?.versionHash;
       setUpdateStatuses((current) => ({
@@ -1332,55 +987,13 @@ export function SkillsConfig({
           latestVersion: versionHash,
         },
       }));
-    } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : String(e));
+      onResourcesChanged?.();
+    } catch (installError) {
+      setUpdateError(installError instanceof Error ? installError.message : String(installError));
     } finally {
       setUpdatingSkill(null);
     }
-  }, [cwd, loadSkills]);
-
-  const toggle = useCallback(async (skill: Skill) => {
-    if (skill.readOnly) return;
-    const next = !skill.disableModelInvocation;
-    setToggling((s) => new Set(s).add(skill.filePath));
-    setSaveError(null);
-    try {
-      const res = await fetch("/api/skills", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filePath: skill.filePath,
-          disableModelInvocation: next,
-        }),
-      });
-      const d = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || d.error) {
-        setSaveError(d.error ?? `HTTP ${res.status}`);
-        return;
-      }
-      setSkills((prev) =>
-        prev.map((s) =>
-          s.filePath === skill.filePath
-            ? { ...s, disableModelInvocation: next }
-            : s,
-        ),
-      );
-      if (next) {
-        setDormantGroupsOpen((current) => ({
-          ...current,
-          [skillGroupLabel(skill)]: true,
-        }));
-      }
-    } catch (e) {
-      setSaveError(String(e));
-    } finally {
-      setToggling((s) => {
-        const n = new Set(s);
-        n.delete(skill.filePath);
-        return n;
-      });
-    }
-  }, []);
+  }, [cwd, loadSkills, onResourcesChanged]);
 
   const uninstallArchive = useCallback(async (skill: Skill) => {
     if (!skill.archiveInstall) return;
@@ -1388,335 +1001,263 @@ export function SkillsConfig({
     setUninstallingArchive(skill.filePath);
     setArchiveUninstallError(null);
     try {
-      const res = await fetch("/api/skills/upload", {
+      const response = await fetch("/api/skills/upload", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cwd,
-          scope: skill.archiveInstall.scope,
-          skillName: skill.name,
-        }),
+        body: JSON.stringify({ cwd, scope: skill.archiveInstall.scope, skillName: skill.name }),
       });
-      const data = await res.json() as { success?: boolean; error?: string };
-      if (!res.ok || data.error || !data.success) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
-      }
-      setSelected(null);
+      const data = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || data.error || !data.success) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setSelectedManage(null);
       await loadSkills();
       onResourcesChanged?.();
-    } catch (error) {
-      setArchiveUninstallError(error instanceof Error ? error.message : String(error));
+    } catch (uninstallError) {
+      setArchiveUninstallError(uninstallError instanceof Error ? uninstallError.message : String(uninstallError));
     } finally {
       setUninstallingArchive(null);
     }
   }, [cwd, loadSkills, onResourcesChanged, t]);
 
-  const selectedSkill = skills.find((s) => s.filePath === selected) ?? null;
+  const availableSkills = useMemo(
+    () => skills.filter((skill) => matchesSkill(skill, availableQuery)),
+    [availableQuery, skills],
+  );
+  const managedSkills = useMemo(() => skills.filter((skill) => {
+    if (skill.builtInSceneId || !matchesSkill(skill, manageQuery)) return false;
+    return manageFilter === "all" || skillScope(skill) === manageFilter;
+  }), [manageFilter, manageQuery, skills]);
+
+  const availableGroups = useMemo(() => ([
+    { key: "scene", label: t("skills.sceneBuiltInGroup"), skills: availableSkills.filter((skill) => skillScope(skill) === "scene") },
+    { key: "project", label: t("skills.currentProject"), skills: availableSkills.filter((skill) => skillScope(skill) === "project"), showWhenEmpty: true, emptyMessage: t("skills.noProjectSkills") },
+    { key: "global", label: t("skills.allProjects"), skills: availableSkills.filter((skill) => skillScope(skill) === "global") },
+    { key: "path", label: t("skills.customPath"), skills: availableSkills.filter((skill) => skillScope(skill) === "path") },
+  ]), [availableSkills, t]);
+  const managedGroups = useMemo(() => ([
+    { key: "project", label: t("skills.currentProject"), skills: managedSkills.filter((skill) => skillScope(skill) === "project") },
+    { key: "global", label: t("skills.globalGroup"), skills: managedSkills.filter((skill) => skillScope(skill) === "global") },
+    { key: "path", label: t("skills.customPath"), skills: managedSkills.filter((skill) => skillScope(skill) === "path") },
+  ]), [managedSkills, t]);
+
+  const selectedAvailableSkill = availableSkills.find((skill) => skill.filePath === selectedAvailable) ?? availableSkills[0] ?? null;
+  const selectedManageSkill = managedSkills.find((skill) => skill.filePath === selectedManage) ?? managedSkills[0] ?? null;
+  const currentSkill = view === "available" ? selectedAvailableSkill : selectedManageSkill;
+  const currentUpdateKey = currentSkill ? updateKey(currentSkill) : null;
+  const installedPackages = useMemo<Record<SkillInstallScope, ReadonlySet<string>>>(() => ({
+    global: new Set(skills.filter((skill) => skill.install?.scope === "global").map((skill) => skill.install!.package)),
+    project: new Set(skills.filter((skill) => skill.install?.scope === "project").map((skill) => skill.install!.package)),
+  }), [skills]);
+
+  const automaticCount = skills.filter((skill) => !skill.disableModelInvocation).length;
+  const userSkills = skills.filter((skill) => !skill.builtInSceneId);
+  const manualCount = userSkills.filter((skill) => skill.disableModelInvocation).length;
+  const updateCount = Object.values(updateStatuses).filter((status) => status.state === "update-available").length;
+  const sceneLabel = sceneId ? getSceneLabel(getSceneDefinition(sceneId), locale) : t("skills.unknownScene");
+  const context = t("skills.sceneContext", { scene: sceneLabel, project: projectName(cwd) });
+  const summary = view === "available"
+    ? t("skills.availableSummary", { count: skills.length, automatic: automaticCount })
+    : view === "manage"
+      ? t("skills.manageSummary", { count: userSkills.length, manual: manualCount })
+      : t("skills.addSummary");
+
+  const switchView = useCallback((nextView: SkillView, focus = false) => {
+    setView(nextView);
+    setSaveError(null);
+    setUpdateError(null);
+    setArchiveUninstallError(null);
+    if (focus) {
+      window.requestAnimationFrame(() => {
+        dialogRef.current?.querySelector<HTMLElement>(`#skills-tab-${nextView}`)?.focus();
+      });
+    }
+  }, []);
+
+  const handleDialogKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeRef.current();
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (target.getAttribute("role") === "tab" && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const currentIndex = SKILL_VIEWS.indexOf(view);
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? SKILL_VIEWS.length - 1
+          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + SKILL_VIEWS.length) % SKILL_VIEWS.length;
+      switchView(SKILL_VIEWS[nextIndex], true);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), input:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])",
+    ) ?? [])].filter((element) => !element.hidden && element.offsetParent !== null);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, [switchView, view]);
+
+  const renderDetail = (skill: Skill, mode: "available" | "manage") => (
+    <SkillDetail
+      key={skill.filePath}
+      skill={skill}
+      cwd={cwd}
+      mode={mode}
+      onToggle={toggle}
+      toggling={toggling.has(skill.filePath)}
+      saveError={saveError}
+      updateStatus={currentUpdateKey ? updateStatuses[currentUpdateKey] : undefined}
+      checkingUpdate={currentUpdateKey ? checkingUpdates.has(currentUpdateKey) : false}
+      updating={updatingSkill === currentUpdateKey}
+      updateError={updateError}
+      onCheckUpdate={() => void checkForUpdates(skill)}
+      onUpdate={() => void updateInstalledSkill(skill)}
+      uninstalling={uninstallingArchive === skill.filePath}
+      uninstallError={archiveUninstallError}
+      onUninstall={() => void uninstallArchive(skill)}
+    />
+  );
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        background: "rgba(0,0,0,0.35)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className={styles.overlay} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div
-        style={{
-          width: isMobile ? "calc(100vw - 16px)" : 860,
-          maxWidth: "calc(100vw - 16px)",
-          height: isMobile ? "calc(100dvh - 16px)" : "78vh",
-          maxHeight: "calc(100dvh - 16px)",
-          background: "var(--bg)",
-          border: "1px solid var(--border)",
-          borderRadius: 10,
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-          overflow: "hidden",
-        }}
+        ref={dialogRef}
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="skills-dialog-title"
+        onKeyDown={handleDialogKeyDown}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 18px",
-            borderBottom: "1px solid var(--border)",
-            flexShrink: 0,
-          }}
+        <header className={styles.header}>
+          <div className={styles.heading}>
+            <h1 id="skills-dialog-title">{t("i18n.skills")}</h1>
+            <p className={styles.context}>{context}</p>
+          </div>
+          <button type="button" className={styles.closeButton} onClick={onClose}>{t("i18n.close")}</button>
+        </header>
+
+        <nav className={styles.topTabs} role="tablist" aria-label={t("i18n.skills")}>
+          {SKILL_VIEWS.map((item) => {
+            const labels: Record<SkillView, string> = {
+              available: t("skills.currentAvailable"),
+              manage: t("skills.manage"),
+              add: t("skills.add"),
+            };
+            return (
+              <button
+                type="button"
+                role="tab"
+                id={`skills-tab-${item}`}
+                aria-controls={`skills-panel-${item}`}
+                aria-selected={view === item}
+                tabIndex={view === item ? 0 : -1}
+                className={styles.topTab}
+                key={item}
+                onClick={() => switchView(item)}
+              >
+                {labels[item]}
+              </button>
+            );
+          })}
+        </nav>
+
+        <main
+          id={`skills-panel-${view}`}
+          className={styles.content}
+          role="tabpanel"
+          aria-labelledby={`skills-tab-${view}`}
         >
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span
-              style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}
-            >
-               {t("common.skills")}
-            </span>
-            <code
-              style={{
-                fontSize: 11,
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-mono)",
-                maxWidth: 320,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {shortenPath(cwd)}
-            </code>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 20,
-              lineHeight: 1,
-              padding: "2px 6px",
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        {!projectResourcesLoaded && (
-          <div
-            role="status"
-            style={{
-              padding: "8px 18px",
-              borderBottom: "1px solid var(--border)",
-              background: "var(--bg-panel)",
-              color: "var(--text-muted)",
-              fontSize: 12,
-            }}
-          >
-            {t("trust.skillsNotLoaded")}
-          </div>
-        )}
-
-        {/* Body */}
-        <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}>
-          {/* Left: skill list */}
-          <div
-            style={{
-              width: isMobile ? "100%" : 210,
-              maxHeight: isMobile ? "40vh" : undefined,
-              borderRight: isMobile ? "none" : "1px solid var(--border)",
-              borderBottom: isMobile ? "1px solid var(--border)" : "none",
-              display: "flex",
-              flexDirection: "column",
-              flexShrink: 0,
-              background: "var(--bg-panel)",
-            }}
-          >
-            <ConfigAddButton
-              active={addMode}
-              label={t("i18n.addSkill")}
-              onClick={() => {
-                setSelected(null);
-                setAddMode(true);
-              }}
+          {view === "add" ? (
+            <AddSkillPanel
+              cwd={cwd}
+              installedPackages={installedPackages}
+              projectResourcesLoaded={projectResourcesLoaded}
+              onInstalled={() => { void loadSkills(); onResourcesChanged?.(); }}
             />
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }}>
-              {loading ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                  }}
-                >
-                   {t("i18n.loading")}
+          ) : (
+            <div className={styles.split}>
+              <aside className={styles.rail}>
+                <div className={styles.railIntro}>
+                  <strong>{view === "available" ? t("skills.currentAvailable") : t("skills.manage")}</strong>
+                  <span>{view === "available" ? t("skills.currentAvailableHint") : t("skills.manageHint")}</span>
                 </div>
-              ) : error ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 11,
-                    color: "#f87171",
-                  }}
-                >
-                  {error}
-                </div>
-              ) : skills.length === 0 ? (
-                <div
-                  style={{
-                    padding: "10px 8px",
-                    fontSize: 11,
-                    color: "var(--text-dim)",
-                  }}
-                >
-                   {t("i18n.noSkills")}
-                </div>
-              ) : (
-                buildSkillGroups(skills).map(({ label, skills: groupSkills }) => (
-                  <SkillGroupBlock
-                    key={label}
-                    label={label}
-                    skills={groupSkills}
-                    dormantOpen={dormantGroupsOpen[label] ?? false}
-                    selected={selected}
-                    addMode={addMode}
+                <input
+                  className={styles.search}
+                  value={view === "available" ? availableQuery : manageQuery}
+                  aria-label={view === "available" ? t("skills.searchAvailable") : t("skills.searchManaged")}
+                  placeholder={view === "available" ? t("skills.searchAvailable") : t("skills.searchManaged")}
+                  onChange={(event) => view === "available"
+                    ? setAvailableQuery(event.target.value)
+                    : setManageQuery(event.target.value)}
+                />
+                {view === "manage" && (
+                  <div className={styles.filterRow} aria-label={t("skills.scope")}>
+                    {(["all", "project", "global", "path"] as ManageFilter[]).map((filter) => (
+                      <button
+                        type="button"
+                        className={`${styles.filterButton} ${manageFilter === filter ? styles.filterActive : ""}`}
+                        aria-pressed={manageFilter === filter}
+                        key={filter}
+                        onClick={() => setManageFilter(filter)}
+                      >
+                        {t(`skills.${filter}`)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!projectResourcesLoaded && <div className={styles.runtimeWarning} role="status">{t("trust.skillsNotLoaded")}</div>}
+                {loading ? (
+                  <div className={styles.empty}>{t("i18n.loading")}</div>
+                ) : error ? (
+                  <div className={styles.error} role="alert">{error}</div>
+                ) : (
+                  <SkillGroups
+                    groups={view === "available" ? availableGroups : managedGroups}
+                    selectedPath={(view === "available" ? selectedAvailableSkill : selectedManageSkill)?.filePath ?? null}
                     updateStatuses={updateStatuses}
-                    onSelect={(skill) => {
-                      setSelected(skill.filePath);
-                      setAddMode(false);
-                    }}
-                    onToggleDormant={() => {
-                      setDormantGroupsOpen((current) => ({
-                        ...current,
-                        [label]: !(current[label] ?? false),
-                      }));
-                    }}
+                    emptyMessage={view === "available" ? t("skills.noAvailable") : t("skills.noManaged")}
+                    onSelect={(skill) => view === "available"
+                      ? setSelectedAvailable(skill.filePath)
+                      : setSelectedManage(skill.filePath)}
                     t={t}
                   />
-                ))
-              )}
+                )}
+                {view === "manage" && <div className={styles.empty}>{t("skills.runtimeInventoryNote")}</div>}
+              </aside>
+              {currentSkill
+                ? renderDetail(currentSkill, view)
+                : !loading && <div className={styles.detail}><div className={styles.empty}>{t("i18n.selectSkill")}</div></div>}
             </div>
-          </div>
+          )}
+        </main>
 
-          {/* Right: detail or add panel */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-            {addMode ? (
-              <AddSkillPanel
-                cwd={cwd}
-                projectResourcesLoaded={projectResourcesLoaded}
-                installedPackages={{
-                  global: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "global")
-                      .map((skill) => skill.install!.package),
-                  ),
-                  project: new Set(
-                    skills
-                      .filter((skill) => skill.install?.scope === "project")
-                      .map((skill) => skill.install!.package),
-                  ),
-                }}
-                onInstalled={() => {
-                  void loadSkills();
-                  onResourcesChanged?.();
-                }}
-              />
-            ) : loading ? null : selectedSkill ? (
-              <SkillDetail
-                key={selectedSkill.filePath}
-                skill={selectedSkill}
-                cwd={cwd}
-                onToggle={toggle}
-                toggling={toggling.has(selectedSkill.filePath)}
-                saveError={saveError}
-                updateStatus={
-                  updateKey(selectedSkill)
-                    ? updateStatuses[updateKey(selectedSkill)!]
-                    : undefined
-                }
-                checkingUpdate={
-                  updateKey(selectedSkill)
-                    ? checkingUpdates.has(updateKey(selectedSkill)!)
-                    : false
-                }
-                updating={updatingSkill === updateKey(selectedSkill)}
-                updateError={updateError}
-                onCheckUpdate={() => void checkForUpdates(selectedSkill)}
-                onUpdate={() => void updateInstalledSkill(selectedSkill)}
-                uninstalling={uninstallingArchive === selectedSkill.filePath}
-                uninstallError={archiveUninstallError}
-                onUninstall={() => void uninstallArchive(selectedSkill)}
-              />
-            ) : (
-              <div
-                style={{
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--text-dim)",
-                  fontSize: 13,
-                }}
-              >
-                 {t("i18n.selectSkill")}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 18px",
-            borderTop: "1px solid var(--border)",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {skills.some((skill) => Boolean(skill.install)) && (
-              <button
-                onClick={() => void checkForUpdates()}
-                disabled={checkingAll || updatingSkill !== null}
-                style={{
-                  padding: "6px 12px",
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  color: "var(--text-muted)",
-                  cursor:
-                    checkingAll || updatingSkill !== null
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity: checkingAll || updatingSkill !== null ? 0.5 : 1,
-                  fontSize: 12,
-                }}
-              >
-                 {checkingAll ? t("i18n.checking") : t("i18n.checkUpdates")}
-              </button>
-            )}
-            {Object.values(updateStatuses).filter(
-              (status) => status.state === "update-available",
-            ).length > 0 && (
-              <span style={{ fontSize: 12, color: "#d97706" }}>
-                {
-                  Object.values(updateStatuses).filter(
-                    (status) => status.state === "update-available",
-                  ).length
-                }{" "}
-                {Object.values(updateStatuses).filter(
-                  (status) => status.state === "update-available",
-                ).length === 1
-                   ? t("i18n.update")
-                   : t("i18n.updates")}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "6px 14px",
-              background: "none",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-             {t("i18n.close")}
-          </button>
-        </div>
+        <footer className={styles.footer}>
+          <p className={styles.summary}>{summary}</p>
+          {view === "manage" && skills.some((skill) => Boolean(skill.install)) && (
+            <button
+              type="button"
+              className={styles.secondary}
+              disabled={checkingAll || updatingSkill !== null}
+              onClick={() => void checkForUpdates()}
+            >
+              {checkingAll
+                ? t("i18n.checking")
+                : updateCount > 0
+                  ? t("skills.updateAvailableCount", { count: updateCount })
+                  : t("skills.checkUpdates")}
+            </button>
+          )}
+          <button type="button" className={styles.doneButton} onClick={onClose}>{t("skills.done")}</button>
+        </footer>
       </div>
     </div>
   );

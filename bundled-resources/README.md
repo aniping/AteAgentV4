@@ -34,3 +34,5 @@ scenes/integration/
 BreakHub 的环境隔离是服务器级规则，不会屏蔽同一 Adapter 中其他 ambient 服务的 direct-tools 选择。项目精确锁定 `pi-mcp-adapter` 版本；`npm install` 会幂等应用兼容补丁，`prepack` 和安装器构建会在补丁缺失或版本不匹配时失败。
 
 场景 MCP 配置由程序只读注入，因此联调场景中的整个 Adapter 都处于 programmatic config 模式：不仅内置 BreakHub，合并进来的 ambient 服务也不能在该会话内通过配置向导或 enable/disable 操作持久修改。工具调用、状态查询和重连仍由同一个 Adapter 提供；需要改配置时应编辑原配置来源并重新加载会话。
+
+当前需求场景内置 `grill-me`。它可由模型在需求、计划或设计存在关键模糊、冲突、缺失决策或不可验收表述时按意图匹配，也支持用户显式调用；其访谈规则已完整包含在 Skill 内，不依赖目标电脑另行安装其他 Skill。

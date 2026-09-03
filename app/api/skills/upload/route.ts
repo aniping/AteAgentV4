@@ -6,10 +6,12 @@ import { getProjectTrustStatus, trustProject } from "@/lib/project-trust";
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 import { getBundledMcpAdapterResources } from "@/lib/mcp-adapter";
 import {
-  parseSkillArchive,
+  assertSkillArchiveInstallConfirmation,
+  inspectSkillArchive,
+  SkillArchiveConfirmationError,
   SkillArchiveConflictError,
   SkillArchiveError,
-} from "@/lib/skill-archive";
+} from "@/lib/skill-archive-inspection";
 import {
   MAX_SKILL_ARCHIVE_BYTES,
   MAX_SKILL_ARCHIVE_LABEL,
@@ -80,7 +82,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const archive = await parseSkillArchive(Buffer.from(await file.arrayBuffer()));
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const { archive, inspection } = await inspectSkillArchive(bytes);
+    assertSkillArchiveInstallConfirmation(
+      inspection,
+      form.get("expectedSha256"),
+      form.get("riskAcknowledged") === "true",
+    );
     const result = await installSkillArchive(archive, {
       scope,
       cwd,
@@ -96,8 +104,14 @@ export async function POST(request: Request) {
     if (error instanceof SkillArchiveConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
-    if (error instanceof SkillArchiveError) {
+    if (error instanceof SkillArchiveConfirmationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof SkillArchiveError) {
+      return NextResponse.json(
+        { error: "Skill ZIP is invalid or could not be installed" },
+        { status: 400 },
+      );
     }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },

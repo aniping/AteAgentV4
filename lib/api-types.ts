@@ -9,6 +9,40 @@ export interface SkillSearchResult {
 
 export type SkillInstallScope = "global" | "project";
 
+export type SkillArchiveRisk =
+  | "instructions-only"
+  | "supporting-files"
+  | "integration-runtime";
+
+export interface SkillArchiveInspection {
+  sha256: string;
+  kind: "skill" | "integration";
+  risk: SkillArchiveRisk;
+  skill: {
+    name: string;
+    description: string;
+    fileCount: number;
+  };
+  archive: {
+    fileCount: number;
+    expandedBytes: number;
+  };
+  integration?: {
+    id: string;
+    version: string;
+    mcp?: {
+      serverName: string;
+      executable: string;
+      requiredTools: string[];
+      environmentNames: string[];
+    };
+  };
+}
+
+export interface SkillArchiveInspectionResponse {
+  inspection: SkillArchiveInspection;
+}
+
 export interface SkillInstallInfo {
   package: string;
   scope: SkillInstallScope;

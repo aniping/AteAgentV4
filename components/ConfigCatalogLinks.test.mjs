@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createJiti } from "jiti";
+
+registerHooks({
+  load(url, context, nextLoad) {
+    if (url.endsWith(".module.css")) {
+      return {
+        format: "module",
+        source: "const styles = new Proxy({}, { get: (_, key) => String(key) }); export default styles;",
+        shortCircuit: true,
+      };
+    }
+    return nextLoad(url, context);
+  },
+});
 
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
@@ -32,14 +46,15 @@ test("skill installation offers a generic ZIP upload", () => {
     cwd: "C:/project",
     installedPackages: { global: new Set(), project: new Set() },
     projectResourcesLoaded: true,
+    initialSource: "zip",
     onInstalled() {},
   }));
 
-  assert.match(html, /Install from ZIP/);
+  assert.match(html, /Local ZIP/);
   assert.match(html, /<input[^>]+type="file"[^>]+accept="\.zip,application\/zip"/);
-  assert.match(html, /Click to choose a ZIP file/);
+  assert.match(html, /Choose a ZIP file/);
   assert.match(html, /or drag and drop it here/);
-  assert.match(html, />Choose ZIP first<\/button>/);
+  assert.doesNotMatch(html, />Confirm install<\/button>/);
   assert.match(html, /exactly one SKILL\.md/);
 });
 
@@ -98,7 +113,9 @@ test("scene-bundled skills are visible but read-only", () => {
   }));
 
   assert.match(html, /Built into the current scene/);
-  assert.match(html, />Read-only<\/span>/);
+  assert.match(html, /Read-only/);
+  assert.match(html, /When is it used automatically\?/);
+  assert.match(html, /\/skill:rf-budget/);
   assert.doesNotMatch(html, /role="switch"/);
 });
 
@@ -160,8 +177,23 @@ test("skill and plugin dialogs expose add actions before their lists", () => {
     onClose() {},
   }));
 
-  assert.match(skillsHtml, /<button[^>]+aria-pressed="false"[^>]*>.*Add skill<\/button>/s);
+  assert.match(skillsHtml, /<button[^>]+role="tab"[^>]+aria-selected="false"[^>]*>Add skill<\/button>/s);
   assert.match(pluginsHtml, /<button[^>]+aria-pressed="false"[^>]*>.*Add plugin<\/button>/s);
   assert.ok(skillsHtml.indexOf("Add skill") < skillsHtml.indexOf("Loading..."));
   assert.ok(pluginsHtml.indexOf("Add plugin") < pluginsHtml.indexOf("Loading..."));
+});
+
+test("skill dialog exposes the approved three-surface information architecture", () => {
+  const html = withI18n(React.createElement(SkillsConfig, {
+    cwd: "C:/project",
+    sceneId: "requirements",
+    onClose() {},
+  }));
+
+  assert.match(html, /role="dialog"/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /Current available/);
+  assert.match(html, /Manage/);
+  assert.match(html, /Add skill/);
+  assert.ok(html.indexOf("Current available") < html.indexOf("Loading..."));
 });

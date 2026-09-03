@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { formatSkillsForPrompt, loadSkills } from "@earendil-works/pi-coding-agent";
 
 const require = createRequire(import.meta.url);
 const {
@@ -152,6 +153,42 @@ test("bundled resources validate and copy into the standalone app root", async (
     );
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("requirements exposes grill-me to the model without leaking it into other scenes", () => {
+  const manifest = JSON.parse(readFileSync(join(sourceRoot, "bundle.json"), "utf8"));
+  const loadedByScene = new Map();
+
+  for (const scene of manifest.scenes) {
+    const result = loadSkills({
+      cwd: sourceRoot,
+      agentDir: sourceRoot,
+      skillPaths: scene.skillPaths.map((skillPath) => resolve(sourceRoot, skillPath)),
+      includeDefaults: false,
+    });
+    assert.deepEqual(result.diagnostics, [], scene.id + " Skill diagnostics");
+    loadedByScene.set(scene.id, result.skills);
+  }
+
+  const requirementsSkills = loadedByScene.get("requirements");
+  const grillMeSkills = requirementsSkills.filter((skill) => skill.name === "grill-me");
+  assert.equal(grillMeSkills.length, 1);
+  assert.equal(grillMeSkills[0].disableModelInvocation, false);
+  assert.match(formatSkillsForPrompt(requirementsSkills), /<name>grill-me<\/name>/);
+
+  for (const [sceneId, skills] of loadedByScene) {
+    if (sceneId === "requirements") continue;
+    assert.equal(
+      skills.some((skill) => skill.name === "grill-me"),
+      false,
+      sceneId + " must not load grill-me",
+    );
+    assert.doesNotMatch(
+      formatSkillsForPrompt(skills),
+      /<name>grill-me<\/name>/,
+      sceneId + " prompt must not expose grill-me",
+    );
   }
 });
 
@@ -356,8 +393,10 @@ test("Skill validation keeps the five scene skill sets isolated", async () => {
       summary,
       sceneIds.map((sceneId) => ({
         sceneId,
-        skillNames: sceneId === "integration"
-          ? ["breakpoint-debugging", "integration-company"]
+        skillNames: sceneId === "requirements"
+          ? ["grill-me", "requirements-company"]
+          : sceneId === "integration"
+            ? ["breakpoint-debugging", "integration-company"]
           : [`${sceneId}-company`],
       })),
     );
