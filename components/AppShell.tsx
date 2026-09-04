@@ -1356,6 +1356,48 @@ export function AppShell() {
     </button>
   );
 
+  const renderFeedbackLink = (mobile: boolean) => (
+    <a
+      href="https://www.google.com/"
+      target="_blank"
+      rel="noopener noreferrer"
+      title={translate("common.reportIssue")}
+      aria-label={translate("common.reportIssue")}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: TOP_BAR_ICON_BUTTON_SIZE, height: TOP_BAR_ICON_BUTTON_SIZE, padding: 0,
+        background: "none", border: "none", borderRight: "1px solid var(--border)",
+        color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
+        textDecoration: "none", transition: "color 0.12s, background 0.12s",
+      }}
+      onMouseEnter={(event) => {
+        event.currentTarget.style.color = "var(--text)";
+        event.currentTarget.style.background = "var(--bg-hover)";
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.color = "var(--text-muted)";
+        event.currentTarget.style.background = "none";
+      }}
+      data-mobile-toolbar-action={mobile ? "feedback" : undefined}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
+        <path d="M12 7v4" />
+        <path d="M12 15h.01" />
+      </svg>
+    </a>
+  );
+
   const renderProjectTrustWarning = (mobileBanner: boolean) => {
     if (!showChat || !projectTrust?.requiresTrust || projectTrust.trusted) return null;
     return (
@@ -1631,6 +1673,7 @@ export function AppShell() {
         </button>
         {mobile && renderThemeButton(true)}
         {mobile && renderLanguageButton(true)}
+        {mobile && renderFeedbackLink(true)}
       </div>
     );
   };
@@ -2080,6 +2123,7 @@ export function AppShell() {
             <>
               {renderThemeButton(false)}
               {renderLanguageButton(false)}
+              {renderFeedbackLink(false)}
               {renderProjectTrustWarning(false)}
               {renderChatToolbarActions(false)}
               {renderSessionStatsButton(false)}

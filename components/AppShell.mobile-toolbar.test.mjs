@@ -4,16 +4,21 @@ import test from "node:test";
 
 const source = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
 
-test("uses a compact mobile toolbar with a floating six-action layer", () => {
+test("uses a compact mobile toolbar with a floating seven-action layer", () => {
   assert.match(source, /data-mobile-toolbar="true"[\s\S]*?flex: 1,[\s\S]*?minWidth: 0/);
   assert.match(
     source,
     /data-mobile-toolbar-actions="true"[\s\S]*?position: "absolute"[\s\S]*?right: 0,[\s\S]*?left: TOP_BAR_ICON_BUTTON_SIZE/,
   );
 
-  for (const action of ["history", "name", "branches", "system", "theme", "language"]) {
+  for (const action of ["history", "name", "branches", "system", "theme", "language", "feedback"]) {
     assert.match(source, new RegExp(`data-mobile-toolbar-action=(?:\\{mobile \\? )?"${action}"`));
   }
+
+  assert.match(
+    source,
+    /<a\s+href="https:\/\/www\.google\.com\/"\s+target="_blank"\s+rel="noopener noreferrer"[\s\S]*?data-mobile-toolbar-action=\{mobile \? "feedback" : undefined\}/,
+  );
 });
 
 test("keeps covered statistics and file controls out of interaction and focus", () => {

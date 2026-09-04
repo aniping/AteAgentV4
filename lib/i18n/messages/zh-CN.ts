@@ -10,6 +10,7 @@ export const zhCNLocale: LocalePlugin = {
     "common.models": "模型",
     "common.skills": "技能",
     "common.plugins": "插件",
+    "common.reportIssue": "反馈问题",
     "brand.subtitle": "无线装备智能助手",
     "sidebar.hide": "隐藏侧边栏",
     "sidebar.show": "显示侧边栏",
