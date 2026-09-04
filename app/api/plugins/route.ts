@@ -13,6 +13,11 @@ import { getAllowedFileRoots, isExistingFilePathAllowed } from "@/lib/file-acces
 import { hasJsonContentType, isApiRequestAllowed } from "@/lib/request-security";
 import { getProjectTrustStatus } from "@/lib/project-trust";
 import { getBundledMcpAdapterPluginInfo, prepareBundledMcpAdapter } from "@/lib/mcp-adapter";
+import {
+  getBundledSubagentsPluginInfo,
+  isSubagentsSource,
+  prepareBundledSubagents,
+} from "@/lib/bundled-subagents";
 import type {
   PluginDiagnostic,
   PluginPackageInfo,
@@ -213,8 +218,9 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
     agentDir,
     settingsManager,
   });
-  // 插件页也可能是升级后的首个入口；先迁移旧全局包，避免与内置 Adapter 重复展示和计数。
+  // 插件页也可能是升级后的首个入口；先迁移旧全局包，避免与内置插件重复展示和计数。
   const bundledMcpAdapter = await prepareBundledMcpAdapter(packageManager);
+  const bundledSubagents = await prepareBundledSubagents(packageManager);
 
   const diagnostics: PluginDiagnostic[] = [];
   let countsByPackage = new Map<string, PluginResourceCounts>();
@@ -241,8 +247,18 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
 
   const configuredPackages = packageManager.listConfiguredPackages();
   const builtinAdapter = getBundledMcpAdapterPluginInfo(bundledMcpAdapter.extensionPaths.length > 0);
-  for (const kind of ["extensions", "skills", "prompts", "themes"] as const) {
-    totals[kind] += builtinAdapter.counts[kind];
+  const projectSubagentsLoaded = configuredPackages.some((pkg) => (
+    pkg.scope === "project"
+    && isSubagentsSource(pkg.source)
+    && (countsByPackage.get(keyFor(pkg.source, "project"))?.extensions ?? 0) > 0
+  ));
+  const builtinSubagents = getBundledSubagentsPluginInfo(
+    bundledSubagents.extensionPaths.length > 0 && !projectSubagentsLoaded,
+  );
+  for (const builtin of [builtinAdapter, builtinSubagents]) {
+    for (const kind of ["extensions", "skills", "prompts", "themes"] as const) {
+      totals[kind] += builtin.counts[kind];
+    }
   }
   const packages = configuredPackages.map((pkg) => {
     const scope = toPluginScope(pkg.scope);
@@ -275,7 +291,7 @@ async function readPlugins(cwd: string): Promise<PluginsResponse> {
   });
 
   return {
-    packages: [builtinAdapter, ...packages],
+    packages: [builtinAdapter, builtinSubagents, ...packages],
     totals,
     diagnostics,
     projectResourcesLoaded: projectTrust.trusted,
