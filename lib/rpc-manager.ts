@@ -22,6 +22,11 @@ import {
   prepareBreakhubMcpServerState,
   prepareBundledMcpAdapter,
 } from "./mcp-adapter";
+import {
+  filterSubagentToolsForPreset,
+  preferLoadedProjectSubagents,
+  prepareBundledSubagents,
+} from "./bundled-subagents";
 import { resolveVisibleModels, selectInitialModelScope } from "./model-scope";
 import { getSceneResourceConfig } from "./scene-resources";
 import { DEFAULT_SCENE_ID, type SceneId } from "./scenes";
@@ -180,7 +185,12 @@ function withExtensionTools(session: AgentSessionLike, toolNames: string[]): str
     .map((t) => t.name)
     .filter((name) => !codingToolNames.has(name));
 
-  return [...new Set([...toolNames, ...extensionToolNames])];
+  return [
+    ...new Set([
+      ...toolNames,
+      ...filterSubagentToolsForPreset(extensionToolNames, toolNames),
+    ]),
+  ];
 }
 
 // ============================================================================
@@ -1705,6 +1715,9 @@ export async function startRpcSession(
       cwd: sessionCwd,
       sceneMcpServers,
     });
+    const {
+      extensionPaths: subagentExtensionPaths,
+    } = await prepareBundledSubagents(packageManager);
 
     // Determine which tools to pass based on requested toolNames.
     // Since v0.68.0, session creation expects string[] tool names instead of Tool[] instances.
@@ -1737,7 +1750,7 @@ export async function startRpcSession(
       agentDir,
       settingsManager,
       resourceLoaderOptions: {
-        additionalExtensionPaths: mcpExtensionPaths,
+        additionalExtensionPaths: [...mcpExtensionPaths, ...subagentExtensionPaths],
         additionalSkillPaths: [
           ...mcpSkillPaths,
           ...(sceneResources?.skillPaths ?? []),
@@ -1752,9 +1765,10 @@ export async function startRpcSession(
         ],
         extensionsOverride: (base) => {
           const withPreferredBash = preferUserBashExtension(base);
+          const withPreferredSubagents = preferLoadedProjectSubagents(withPreferredBash);
           return sceneResources && sceneResources.mcpServers.length > 0
-            ? preferBundledSceneMcpAdapter(withPreferredBash)
-            : withPreferredBash;
+            ? preferBundledSceneMcpAdapter(withPreferredSubagents)
+            : withPreferredSubagents;
         },
         ...(sceneResources
           ? {

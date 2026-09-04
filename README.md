@@ -184,6 +184,7 @@ npm run dev
 - **Skill 管理**：通过“当前可用 / 管理 / 添加技能”区分运行时能力、用户配置和安装入口；场景内置 Skill 会显示自动匹配机制与 `/skill:name` 强制调用方式。支持搜索、更新、模型调用开关和卸载；ZIP 会先只读检查结构、内容规模、风险等级与 SHA-256，用户确认后才安装。
 - **插件管理**：支持通过 npm、Git、本地路径或粘贴安装命令添加和管理 pi 扩展包，并提供官方扩展目录入口。
 - **内置 MCP**：安装包自带 MCP Adapter 及配套 Skill；升级时会移除用户全局安装的旧 Adapter，但保留服务器配置、集成运行时、缓存和 OAuth 凭据。
+- **内置子代理**：安装包自带 `@tintinweb/pi-subagents`，默认或完整工具会话可直接使用 `Agent`、`SubagentWorkflow`、`get_subagent_result` 和 `steer_subagent`；已成功加载的项目同名插件会接管，禁用、缺失或加载失败时回退到内置版。
 - **集成安装包**：支持包含 Skill、运行时和可选 MCP 服务的通用 ZIP。
 
 ## Skill 与集成 ZIP

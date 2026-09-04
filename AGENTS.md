@@ -81,6 +81,7 @@ app/api/
 
 lib/
   agent-client.ts      typed fetch helper for /api/agent commands
+  bundled-subagents.ts resolves the bundled pi-subagents extension and package migration
   draft-store.ts       local draft persistence helpers
   file-access.ts       allowed file roots for /api/files and worktrees
   file-paths.ts        client/server path encoding helpers
@@ -196,6 +197,7 @@ Newer pi emits `compaction_start` / `compaction_end`; older versions emitted `au
 
 ### Plugins and skills
 - `/api/plugins` uses pi's `SettingsManager` + `DefaultPackageManager` for global/project package install, remove, update, enable, and disable. Disabling writes empty `extensions/skills/prompts/themes` arrays for that package entry.
+- `@tintinweb/pi-subagents` is bundled as an application dependency and injected through `additionalExtensionPaths`; user-scope copies are migrated away, while a successfully loaded project copy overrides the bundled version and disabled/missing copies fall back to it. Its tools stay inactive in the read-only preset. Keep its complete runtime dependency closure in the standalone trace and installer payload checks.
 - `/api/skills` uses `DefaultResourceLoader` so settings paths, package skills, project `.agents/skills`, and the selected scene's bundled Skill paths are listed the same way the runtime sees them. Bundled scene Skills are marked read-only and cannot be toggled from the UI.
 - Skill toggling edits only the `disable-model-invocation` frontmatter key on the target `SKILL.md`; keep that surgical so user formatting survives.
 - `/api/skills/install` shells through `npx skills add ... --agent pi`; project installs run with the selected cwd.
