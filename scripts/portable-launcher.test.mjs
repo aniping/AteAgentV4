@@ -54,6 +54,7 @@ test("Windows package builds a Wireless ATE Agent NSIS installer with compatible
   ]);
 
   const parsedPackageJson = JSON.parse(packageJson);
+  assert.equal(parsedPackageJson.dependencies["@tintinweb/pi-subagents"], "0.19.0");
   assert.equal(parsedPackageJson.scripts.package, "scripts\\package-installer.cmd");
   assert.equal(parsedPackageJson.scripts.postinstall, "node scripts/patch-pi-mcp-adapter.cjs");
   assert.equal(
@@ -85,6 +86,26 @@ test("Windows package builds a Wireless ATE Agent NSIS installer with compatible
   assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/direct-tools\.ts/);
   assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/metadata-cache\.ts/);
   assert.match(packageScript, /app\/node_modules\/pi-mcp-adapter\/types\.ts/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@tintinweb\/pi-subagents\/package\.json/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@tintinweb\/pi-subagents\/LICENSE/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@tintinweb\/pi-subagents\/src\/index\.ts/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@tintinweb\/pi-subagents\/src\/workflow\/worker-source\.ts/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@sinclair\/typebox\/package\.json/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/@sinclair\/typebox\/license/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/croner\/package\.json/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/croner\/LICENSE/);
+  assert.match(
+    requiredFilesBlock,
+    /app\/node_modules\/@tintinweb\/pi-subagents\/node_modules\/nanoid\/package\.json/,
+  );
+  assert.match(requiredFilesBlock, /app\/node_modules\/@tintinweb\/pi-subagents\/node_modules\/nanoid\/LICENSE/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/typebox\/package\.json/);
+  assert.match(requiredFilesBlock, /app\/node_modules\/typebox\/license/);
+  assert.match(packageScript, /subagentsPackageJson\.version !== declaredSubagentsVersion/);
+  assert.match(packageScript, /Installed pi-subagents/);
+  assert.match(packageScript, /function collectRuntimePackageRoots\(rootPackage\)/);
+  assert.match(packageScript, /assertRuntimePackageClosure\(appRoot, "@tintinweb\/pi-subagents"\)/);
+  assert.match(packageScript, /Installer payload is missing runtime package file/);
   assert.match(packageScript, /patchPiMcpAdapter\(appRoot, \{ checkOnly: true \}\)/);
   assert.match(packageScript, /removeRedundantNestedPackage/);
   assert.match(packageScript, /pruneInstallerPayload/);

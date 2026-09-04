@@ -47,3 +47,22 @@ test("portable builds trace the bundled MCP Adapter dependency closure", async (
     else process.env.PI_WEB_STANDALONE = previousStandalone;
   }
 });
+
+test("portable builds trace the bundled subagents dependency closure", async () => {
+  const previousStandalone = process.env.PI_WEB_STANDALONE;
+  process.env.PI_WEB_STANDALONE = "1";
+  try {
+    const standaloneJiti = createJiti(import.meta.url, { moduleCache: false });
+    const { default: config } = await standaloneJiti.import("./next.config.ts");
+    const includes = config.outputFileTracingIncludes?.["/*"] ?? [];
+
+    assert.ok(includes.includes("./node_modules/@tintinweb/pi-subagents/**/*"));
+    assert.ok(includes.includes("./node_modules/@sinclair/typebox/**/*"));
+    assert.ok(includes.includes("./node_modules/croner/**/*"));
+    assert.ok(includes.includes("./node_modules/@tintinweb/pi-subagents/node_modules/nanoid/**/*"));
+    assert.ok(includes.includes("./node_modules/typebox/**/*"));
+  } finally {
+    if (previousStandalone === undefined) delete process.env.PI_WEB_STANDALONE;
+    else process.env.PI_WEB_STANDALONE = previousStandalone;
+  }
+});

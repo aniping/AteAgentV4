@@ -17,10 +17,19 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json
 const agentPackageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"), "utf8"),
 );
+const subagentsPackageJson = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "node_modules", "@tintinweb", "pi-subagents", "package.json"), "utf8"),
+);
 const declaredAgentVersion = packageJson.dependencies["@earendil-works/pi-coding-agent"];
 if (agentPackageJson.version !== declaredAgentVersion) {
   throw new Error(
     `Installed pi-coding-agent ${agentPackageJson.version} does not match package.json ${declaredAgentVersion}. Run npm install before packaging.`,
+  );
+}
+const declaredSubagentsVersion = packageJson.dependencies["@tintinweb/pi-subagents"];
+if (subagentsPackageJson.version !== declaredSubagentsVersion) {
+  throw new Error(
+    `Installed pi-subagents ${subagentsPackageJson.version} does not match package.json ${declaredSubagentsVersion}. Run npm install before packaging.`,
   );
 }
 
@@ -63,6 +72,51 @@ function listFiles(root) {
     else if (entry.isFile()) files.push(fullPath);
   }
   return files;
+}
+
+function resolveDependencyPackageRoot(packageName, fromPackageRoot) {
+  let currentDir = fromPackageRoot;
+  while (true) {
+    const packageRoot = path.join(currentDir, "node_modules", ...packageName.split("/"));
+    if (fs.existsSync(path.join(packageRoot, "package.json"))) return packageRoot;
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) return null;
+    currentDir = parentDir;
+  }
+}
+
+function collectRuntimePackageRoots(rootPackage) {
+  const packageRoots = new Set();
+  const visit = (packageRoot) => {
+    if (packageRoots.has(packageRoot)) return;
+    packageRoots.add(packageRoot);
+    const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
+    const dependencies = { ...manifest.dependencies, ...manifest.optionalDependencies };
+    for (const dependency of Object.keys(dependencies)) {
+      const dependencyRoot = resolveDependencyPackageRoot(dependency, packageRoot);
+      if (!dependencyRoot) {
+        throw new Error(`Installed runtime dependency is missing: ${dependency} (from ${manifest.name}).`);
+      }
+      visit(dependencyRoot);
+    }
+  };
+
+  visit(path.join(repoRoot, "node_modules", ...rootPackage.split("/")));
+  return [...packageRoots];
+}
+
+function assertRuntimePackageClosure(appRoot, rootPackage) {
+  for (const sourceRoot of collectRuntimePackageRoots(rootPackage)) {
+    const payloadRoot = path.join(appRoot, path.relative(repoRoot, sourceRoot));
+    for (const sourceFile of listFiles(sourceRoot)) {
+      if (path.extname(sourceFile).toLowerCase() === ".map") continue;
+      const payloadFile = path.join(payloadRoot, path.relative(sourceRoot, sourceFile));
+      if (!fs.existsSync(payloadFile)) {
+        throw new Error(`Installer payload is missing runtime package file: ${path.relative(repoRoot, sourceFile)}`);
+      }
+    }
+  }
 }
 
 async function createWindowsIcon(svgPath, destination) {
@@ -398,12 +452,25 @@ async function main() {
     "app/node_modules/pi-mcp-adapter/direct-tools.ts",
     "app/node_modules/pi-mcp-adapter/metadata-cache.ts",
     "app/node_modules/pi-mcp-adapter/types.ts",
+    "app/node_modules/@tintinweb/pi-subagents/package.json",
+    "app/node_modules/@tintinweb/pi-subagents/LICENSE",
+    "app/node_modules/@tintinweb/pi-subagents/src/index.ts",
+    "app/node_modules/@tintinweb/pi-subagents/src/workflow/worker-source.ts",
+    "app/node_modules/@sinclair/typebox/package.json",
+    "app/node_modules/@sinclair/typebox/license",
+    "app/node_modules/croner/package.json",
+    "app/node_modules/croner/LICENSE",
+    "app/node_modules/@tintinweb/pi-subagents/node_modules/nanoid/package.json",
+    "app/node_modules/@tintinweb/pi-subagents/node_modules/nanoid/LICENSE",
+    "app/node_modules/typebox/package.json",
+    "app/node_modules/typebox/license",
   ];
   for (const required of requiredFiles) {
     if (!fs.existsSync(path.join(stagingRoot, required))) {
       throw new Error(`Installer payload entry is missing: ${required}`);
     }
   }
+  assertRuntimePackageClosure(appRoot, "@tintinweb/pi-subagents");
   patchPiMcpAdapter(appRoot, { checkOnly: true });
 
   const relativePaths = listFiles(stagingRoot).map((file) => path.relative(stagingRoot, file));
