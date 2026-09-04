@@ -33,10 +33,17 @@ function isLoopbackHostname(hostname: string): boolean {
     || /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
+function parseIpv4Octets(hostname: string): number[] | null {
+  const octets = withoutIpv6Brackets(hostname).split(".").map(Number);
+  return octets.length === 4 && octets.every((octet) => (
+    Number.isInteger(octet) && octet >= 0 && octet <= 255
+  )) ? octets : null;
+}
+
 function isPrivateNetworkHostname(hostname: string): boolean {
   const normalized = withoutIpv6Brackets(hostname);
-  const octets = normalized.split(".").map(Number);
-  if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
+  const octets = parseIpv4Octets(normalized);
+  if (octets) {
     return octets[0] === 10
       || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
       || (octets[0] === 192 && octets[1] === 168);
@@ -45,11 +52,17 @@ function isPrivateNetworkHostname(hostname: string): boolean {
   return /^(?:fc|fd)[\da-f]{2}:/.test(normalized);
 }
 
+function isIpHostname(hostname: string): boolean {
+  const normalized = withoutIpv6Brackets(hostname);
+  return parseIpv4Octets(normalized) !== null || normalized.includes(":");
+}
+
 function shouldDefaultToHttp(address: string): boolean {
   try {
     const provisional = new URL(`http://${address}`);
     const hostname = withoutIpv6Brackets(provisional.hostname);
     return isLoopbackHostname(hostname)
+      || isIpHostname(hostname)
       || isPrivateNetworkHostname(hostname)
       || hostname === "0.0.0.0"
       || hostname.endsWith(".local")
@@ -170,7 +183,7 @@ export function isLocalBrowserUrl(url: string | null): boolean {
 }
 
 const DIRECT_FRAME_FALLBACK_RESPONSES = [
-  { status: 403, error: "target-not-local" },
+  { status: 403, error: "target-unroutable" },
   { status: 502, error: "target-unresolved" },
 ] as const;
 
@@ -188,7 +201,7 @@ export function shouldUseBrowserPreviewProxy(url: string | null): boolean {
     const likelyPrivateName = hostname.endsWith(".local")
       || (!hostname.includes(".") && !hostname.includes(":"));
     return parsed.protocol === "http:"
-      && (isLoopbackHostname(hostname) || isPrivateNetworkHostname(hostname) || likelyPrivateName);
+      && (isLoopbackHostname(hostname) || isIpHostname(hostname) || likelyPrivateName);
   } catch {
     return false;
   }

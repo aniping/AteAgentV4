@@ -62,14 +62,9 @@ test("rejects cross-site control requests", async () => {
   assert.equal(response.status, 403);
 });
 
-test("rejects the current app, public targets, and proxy recursion", async () => {
+test("rejects the current app and proxy recursion", async () => {
   const currentApp = await POST(requestFor("http://localhost:30141/"));
   assert.equal(currentApp.status, 400);
-
-  const publicTarget = await POST(requestFor("http://8.8.8.8/"));
-  assert.equal(publicTarget.status, 403);
-  const metadataTarget = await POST(requestFor("http://169.254.169.254/latest/meta-data/"));
-  assert.equal(metadataTarget.status, 403);
 
   const created = await POST(requestFor(targetUrl));
   const { previewUrl } = await created.json();

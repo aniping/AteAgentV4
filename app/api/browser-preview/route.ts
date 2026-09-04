@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof BrowserPreviewProxyError) {
-      const status = error.code === "target-not-local" || error.code === "recursive-target"
+      const status = error.code === "target-unroutable" || error.code === "recursive-target"
         ? 403
         : error.code === "target-unresolved"
           ? 502

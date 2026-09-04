@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
+import { createSocket as createDatagramSocket } from "node:dgram";
 import {
   createServer,
   request as httpRequest,
@@ -21,12 +22,6 @@ LOOPBACK_ADDRESSES.addSubnet("127.0.0.0", 8, "ipv4");
 LOOPBACK_ADDRESSES.addAddress("::", "ipv6");
 LOOPBACK_ADDRESSES.addAddress("::1", "ipv6");
 
-const PRIVATE_NETWORK_ADDRESSES = new BlockList();
-PRIVATE_NETWORK_ADDRESSES.addSubnet("10.0.0.0", 8, "ipv4");
-PRIVATE_NETWORK_ADDRESSES.addSubnet("172.16.0.0", 12, "ipv4");
-PRIVATE_NETWORK_ADDRESSES.addSubnet("192.168.0.0", 16, "ipv4");
-PRIVATE_NETWORK_ADDRESSES.addSubnet("fc00::", 7, "ipv6");
-
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -44,7 +39,7 @@ const UPSTREAM_RESPONSE_TIMEOUT_MS = 30 * 1000;
 
 export type BrowserPreviewProxyErrorCode =
   | "invalid-target"
-  | "target-not-local"
+  | "target-unroutable"
   | "target-unresolved"
   | "recursive-target"
   | "proxy-start-failed";
@@ -67,15 +62,37 @@ export interface BrowserPreviewProxyOptions {
   parentOrigin: string;
   forbiddenOrigins?: string[];
   addressProvider?: BrowserPreviewAddressProvider;
+  routeSourceProvider?: BrowserPreviewRouteSourceProvider;
 }
 
 export type BrowserPreviewAddressProvider = () => readonly string[];
+
+export interface BrowserPreviewRouteTarget {
+  targetAddress: string;
+  targetOrigin: string;
+  targetPort: number;
+  family: 4 | 6;
+}
+
+export type BrowserPreviewRouteSourceProvider = (
+  target: BrowserPreviewRouteTarget,
+) => string | null | Promise<string | null>;
+
+interface BrowserPreviewNetworkProviders {
+  addresses: BrowserPreviewAddressProvider;
+  routeSource: BrowserPreviewRouteSourceProvider;
+}
 
 interface ResolvedTarget {
   url: URL;
   address: string;
   family: 4 | 6;
-  requiresAddressOwnership: boolean;
+  bindingKind: "loopback" | "host-interface" | "routed";
+}
+
+interface ResolvedConnectionBinding {
+  kind: ResolvedTarget["bindingKind"];
+  localAddress?: string;
 }
 
 interface ManagedBrowserPreviewProxy {
@@ -112,23 +129,10 @@ function systemInterfaceAddresses(): readonly string[] {
     .map(({ address }) => address);
 }
 
-export function isBrowserPreviewAddressAllowed(
+export function isBrowserPreviewIpAddress(
   address: string,
-  allowPrivateNetwork = true,
-  family = isIP(address),
 ): boolean {
-  if (family === 4) {
-    return LOOPBACK_ADDRESSES.check(address, "ipv4")
-      || (allowPrivateNetwork && PRIVATE_NETWORK_ADDRESSES.check(address, "ipv4"));
-  }
-  if (family !== 6) return false;
-
-  const mappedIpv4 = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i)?.[1];
-  if (mappedIpv4 && isIP(mappedIpv4) === 4) {
-    return isBrowserPreviewAddressAllowed(mappedIpv4, allowPrivateNetwork, 4);
-  }
-  return LOOPBACK_ADDRESSES.check(address, "ipv6")
-    || (allowPrivateNetwork && PRIVATE_NETWORK_ADDRESSES.check(address, "ipv6"));
+  return isIP(withoutIpv6Brackets(address)) !== 0;
 }
 
 function connectionAddress(address: string): string {
@@ -138,7 +142,12 @@ function connectionAddress(address: string): string {
 }
 
 function isLoopbackAddress(address: string, family = isIP(address)): boolean {
-  return isBrowserPreviewAddressAllowed(address, false, family);
+  if (family === 4) return LOOPBACK_ADDRESSES.check(address, "ipv4");
+  if (family !== 6) return false;
+  const mappedIpv4 = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i)?.[1];
+  return mappedIpv4 && isIP(mappedIpv4) === 4
+    ? LOOPBACK_ADDRESSES.check(mappedIpv4, "ipv4")
+    : LOOPBACK_ADDRESSES.check(address, "ipv6");
 }
 
 function addressProviderOwns(
@@ -146,10 +155,6 @@ function addressProviderOwns(
   address: string,
   family: 4 | 6,
 ): boolean {
-  if (!PRIVATE_NETWORK_ADDRESSES.check(address, family === 4 ? "ipv4" : "ipv6")) {
-    return false;
-  }
-
   let addresses: readonly string[];
   try {
     addresses = addressProvider();
@@ -167,12 +172,77 @@ function addressProviderOwns(
   });
 }
 
-function isResolvedTargetStillAllowed(
+function systemRouteSourceAddress(
+  target: BrowserPreviewRouteTarget,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const socket = createDatagramSocket(target.family === 4 ? "udp4" : "udp6");
+    let settled = false;
+    const finish = (address: string | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        socket.close();
+      } catch {
+        // The route lookup can fail before the UDP socket has bound.
+      }
+      resolve(address);
+    };
+    const timeout = setTimeout(() => finish(null), 1_000);
+    timeout.unref();
+    socket.unref();
+    socket.once("error", () => finish(null));
+    socket.connect(target.targetPort, target.targetAddress, () => {
+      const address = socket.address();
+      finish(typeof address === "string" ? null : address.address);
+    });
+  });
+}
+
+async function resolveConnectionBinding(
+  url: URL,
+  address: string,
+  family: 4 | 6,
+  allowRoutedTarget: boolean,
+  providers: BrowserPreviewNetworkProviders,
+): Promise<ResolvedConnectionBinding | null> {
+  if (isLoopbackAddress(address, family)) return { kind: "loopback" };
+  if (addressProviderOwns(providers.addresses, address, family)) {
+    return { kind: "host-interface", localAddress: address };
+  }
+  if (!allowRoutedTarget) return null;
+
+  let sourceAddress: string | null;
+  try {
+    sourceAddress = await providers.routeSource({
+      targetAddress: address,
+      targetOrigin: url.origin,
+      targetPort: targetPort(url),
+      family,
+    });
+  } catch {
+    return null;
+  }
+  if (!sourceAddress) return null;
+  const normalizedSource = withoutIpv6Brackets(sourceAddress);
+  return addressProviderOwns(providers.addresses, normalizedSource, family)
+    ? { kind: "routed", localAddress: normalizedSource }
+    : null;
+}
+
+async function revalidateConnectionBinding(
   resolved: ResolvedTarget,
-  addressProvider: BrowserPreviewAddressProvider,
-): boolean {
-  return !resolved.requiresAddressOwnership
-    || addressProviderOwns(addressProvider, resolved.address, resolved.family);
+  providers: BrowserPreviewNetworkProviders,
+): Promise<ResolvedConnectionBinding | null> {
+  const binding = await resolveConnectionBinding(
+    resolved.url,
+    resolved.address,
+    resolved.family,
+    true,
+    providers,
+  );
+  return binding?.kind === resolved.bindingKind ? binding : null;
 }
 
 function endpointKey(address: string, port: string | number): string {
@@ -190,10 +260,13 @@ function browserHostForParent(parent: ResolvedTarget): string {
   return parent.family === 6 ? `[${hostname}]` : hostname;
 }
 
-async function resolveLocalTarget(
+async function resolveBrowserPreviewTarget(
   rawTarget: string,
-  allowPrivateNetwork = false,
-  addressProvider: BrowserPreviewAddressProvider = systemInterfaceAddresses,
+  allowRoutedTarget = false,
+  providers: BrowserPreviewNetworkProviders = {
+    addresses: systemInterfaceAddresses,
+    routeSource: systemRouteSourceAddress,
+  },
 ): Promise<ResolvedTarget> {
   let url: URL;
   try {
@@ -203,7 +276,7 @@ async function resolveLocalTarget(
   }
 
   if (url.protocol !== "http:" || url.username || url.password) {
-    throw new BrowserPreviewProxyError("invalid-target", "The compatibility proxy accepts credential-free loopback HTTP URLs only");
+    throw new BrowserPreviewProxyError("invalid-target", "The compatibility proxy accepts credential-free HTTP URLs only");
   }
   if (proxyOrigins.has(url.origin)) {
     throw new BrowserPreviewProxyError("recursive-target", "A browser preview proxy cannot proxy another preview proxy");
@@ -212,24 +285,30 @@ async function resolveLocalTarget(
   const hostname = withoutIpv6Brackets(url.hostname);
   const literalFamily = isIP(hostname);
   if (literalFamily) {
-    if (!isBrowserPreviewAddressAllowed(hostname, allowPrivateNetwork, literalFamily)) {
-      throw new BrowserPreviewProxyError("target-not-local", "Only loopback and private-network services can use the compatibility proxy");
+    if (!isBrowserPreviewIpAddress(hostname)) {
+      throw new BrowserPreviewProxyError("target-unroutable", "The browser preview target is not an IP address");
     }
     const address = connectionAddress(hostname);
-    const requiresAddressOwnership = !isLoopbackAddress(address, literalFamily);
-    if (requiresAddressOwnership && !addressProviderOwns(addressProvider, address, literalFamily as 4 | 6)) {
-      throw new BrowserPreviewProxyError("target-not-local", "The private service address is not assigned to this machine");
+    const binding = await resolveConnectionBinding(
+      url,
+      address,
+      literalFamily as 4 | 6,
+      allowRoutedTarget,
+      providers,
+    );
+    if (!binding) {
+      throw new BrowserPreviewProxyError("target-unroutable", "The browser preview target has no usable route from this machine");
     }
     return {
       url,
       address,
       family: literalFamily as 4 | 6,
-      requiresAddressOwnership,
+      bindingKind: binding.kind,
     };
   }
 
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
-    return { url, address: "127.0.0.1", family: 4, requiresAddressOwnership: false };
+    return { url, address: "127.0.0.1", family: 4, bindingKind: "loopback" };
   }
 
   let addresses: LookupAddress[];
@@ -242,21 +321,28 @@ async function resolveLocalTarget(
   if (addresses.length === 0) {
     throw new BrowserPreviewProxyError("target-unresolved", "The local service hostname did not resolve to an address");
   }
-  if (addresses.some(({ address, family }) => {
-    if (!isBrowserPreviewAddressAllowed(address, allowPrivateNetwork, family)) return true;
-    return !isLoopbackAddress(address, family)
-      && !addressProviderOwns(addressProvider, address, family as 4 | 6);
-  })) {
-    throw new BrowserPreviewProxyError("target-not-local", "The compatibility proxy refuses hostnames that resolve outside loopback or private networks");
+  const candidates = await Promise.all(addresses.map(async (candidate) => {
+    const address = connectionAddress(candidate.address);
+    const family = candidate.family as 4 | 6;
+    const binding = await resolveConnectionBinding(
+      url,
+      address,
+      family,
+      allowRoutedTarget,
+      providers,
+    );
+    return binding ? { address, family, binding } : null;
+  }));
+  const usable = candidates.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+  const selected = usable.find(({ family }) => family === 4) ?? usable[0];
+  if (!selected) {
+    throw new BrowserPreviewProxyError("target-unroutable", "The browser preview hostname has no usable route from this machine");
   }
-
-  const selected = addresses.find(({ family }) => family === 4) ?? addresses[0];
-  const address = connectionAddress(selected.address);
   return {
     url,
-    address,
-    family: selected.family as 4 | 6,
-    requiresAddressOwnership: !isLoopbackAddress(address, selected.family),
+    address: selected.address,
+    family: selected.family,
+    bindingKind: selected.binding.kind,
   };
 }
 
@@ -456,14 +542,14 @@ function isPreviewRequestAllowed(request: IncomingMessage, previewOrigin: string
   return request.headers["sec-fetch-site"] !== "cross-site";
 }
 
-function proxyHttpRequest(
+async function proxyHttpRequest(
   resolved: ResolvedTarget,
-  addressProvider: BrowserPreviewAddressProvider,
+  providers: BrowserPreviewNetworkProviders,
   previewOrigin: string,
   parentOrigin: string,
   request: IncomingMessage,
   response: ServerResponse,
-): void {
+): Promise<void> {
   if (!ALLOWED_METHODS.has(request.method ?? "")) {
     response.setHeader("Allow", [...ALLOWED_METHODS].join(", "));
     sendHttpError(response, 405, "This HTTP method is not allowed in browser preview.");
@@ -474,16 +560,18 @@ function proxyHttpRequest(
     sendHttpError(response, 400, "Invalid preview request path.");
     return;
   }
-  if (!isResolvedTargetStillAllowed(resolved, addressProvider)) {
-    sendHttpError(response, 403, "The private service address is no longer assigned to this machine.");
+  const binding = await revalidateConnectionBinding(resolved, providers);
+  if (!binding) {
+    sendHttpError(response, 403, "The service route is no longer available from this machine.");
     return;
   }
+  if (request.destroyed || response.destroyed) return;
 
   const requestOptions: RequestOptions = {
     protocol: resolved.url.protocol,
     hostname: resolved.address,
     family: resolved.family,
-    localAddress: resolved.requiresAddressOwnership ? resolved.address : undefined,
+    localAddress: binding.localAddress,
     port: resolved.url.port || (resolved.url.protocol === "https:" ? 443 : 80),
     method: request.method,
     path: `${targetUrl.pathname}${targetUrl.search}`,
@@ -551,14 +639,14 @@ function sendSocketError(
   );
 }
 
-function proxyWebSocket(
+async function proxyWebSocket(
   resolved: ResolvedTarget,
-  addressProvider: BrowserPreviewAddressProvider,
+  providers: BrowserPreviewNetworkProviders,
   previewOrigin: string,
   request: IncomingMessage,
   clientSocket: Duplex,
   head: Buffer,
-): void {
+): Promise<void> {
   if (request.method !== "GET") {
     sendSocketError(clientSocket, "WebSocket upgrades require GET.", 405, "Method Not Allowed");
     return;
@@ -568,17 +656,19 @@ function proxyWebSocket(
     sendSocketError(clientSocket, "Invalid preview WebSocket path.", 400, "Bad Request");
     return;
   }
-  if (!isResolvedTargetStillAllowed(resolved, addressProvider)) {
-    sendSocketError(clientSocket, "The private service address is no longer assigned to this machine.", 403, "Forbidden");
+  const binding = await revalidateConnectionBinding(resolved, providers);
+  if (!binding) {
+    sendSocketError(clientSocket, "The service route is no longer available from this machine.", 403, "Forbidden");
     return;
   }
+  if (clientSocket.destroyed) return;
 
   const port = targetPort(resolved.url);
   const transportSocket = new Socket().connect({
     host: resolved.address,
     port,
     family: resolved.family,
-    localAddress: resolved.requiresAddressOwnership ? resolved.address : undefined,
+    localAddress: binding.localAddress,
   });
   const upstreamSocket = resolved.url.protocol === "https:"
     ? tlsConnect({
@@ -604,7 +694,7 @@ async function startProxy(
   registryKey: string,
   resolved: ResolvedTarget,
   parent: ResolvedTarget,
-  addressProvider: BrowserPreviewAddressProvider,
+  providers: BrowserPreviewNetworkProviders,
 ): Promise<ManagedBrowserPreviewProxy> {
   let previewOrigin = "";
   let listenerEndpoint = "";
@@ -640,7 +730,8 @@ async function startProxy(
       sendHttpError(response, 421, "This request does not belong to this browser preview.");
       return;
     }
-    proxyHttpRequest(resolved, addressProvider, previewOrigin, parent.url.origin, request, response);
+    void proxyHttpRequest(resolved, providers, previewOrigin, parent.url.origin, request, response)
+      .catch(() => sendHttpError(response, 502, `Unable to prepare a route to ${resolved.url.host}.`));
   });
   server.on("upgrade", (request, socket, head) => {
     touch();
@@ -648,7 +739,8 @@ async function startProxy(
       sendSocketError(socket, "This request does not belong to this browser preview.", 421, "Misdirected Request");
       return;
     }
-    proxyWebSocket(resolved, addressProvider, previewOrigin, request, socket, head);
+    void proxyWebSocket(resolved, providers, previewOrigin, request, socket, head)
+      .catch(() => sendSocketError(socket, `Unable to prepare a route to ${resolved.url.host}.`));
   });
   server.on("connection", (socket) => {
     sockets.add(socket);
@@ -711,17 +803,20 @@ export async function createBrowserPreviewUrl(
   } catch (error) {
     throw new BrowserPreviewProxyError("invalid-target", "Invalid browser preview parent origin", { cause: error });
   }
-  const addressProvider = options.addressProvider ?? systemInterfaceAddresses;
-  const parent = await resolveLocalTarget(parentOrigin, false, addressProvider);
-  const resolved = await resolveLocalTarget(rawTarget, true, addressProvider);
-  if (resolved.requiresAddressOwnership && targetPort(resolved.url) === targetPort(parent.url)) {
-    throw new BrowserPreviewProxyError("recursive-target", "A private-address alias of the Wireless ATE Agent service cannot be previewed inside itself");
+  const providers: BrowserPreviewNetworkProviders = {
+    addresses: options.addressProvider ?? systemInterfaceAddresses,
+    routeSource: options.routeSourceProvider ?? systemRouteSourceAddress,
+  };
+  const parent = await resolveBrowserPreviewTarget(parentOrigin, false, providers);
+  const resolved = await resolveBrowserPreviewTarget(rawTarget, true, providers);
+  if (resolved.bindingKind !== "routed" && targetPort(resolved.url) === targetPort(parent.url)) {
+    throw new BrowserPreviewProxyError("recursive-target", "A local-address alias of the Wireless ATE Agent service cannot be previewed inside itself");
   }
   if (proxyEndpoints.has(endpointKey(resolved.address, targetPort(resolved.url)))) {
     throw new BrowserPreviewProxyError("recursive-target", "A browser preview proxy cannot proxy an active preview listener");
   }
   for (const forbiddenOrigin of options.forbiddenOrigins ?? []) {
-    const forbidden = await resolveLocalTarget(forbiddenOrigin);
+    const forbidden = await resolveBrowserPreviewTarget(forbiddenOrigin, false, providers);
     if (endpointKey(forbidden.address, targetPort(forbidden.url)) === endpointKey(resolved.address, targetPort(resolved.url))) {
       throw new BrowserPreviewProxyError("recursive-target", "The Wireless ATE Agent service cannot be previewed inside itself");
     }
@@ -733,7 +828,7 @@ export async function createBrowserPreviewUrl(
   const registryKey = `${parent.url.origin}\0${resolved.url.origin}`;
   let proxyPromise = proxyRegistry.get(registryKey);
   if (!proxyPromise) {
-    proxyPromise = startProxy(registryKey, resolved, parent, addressProvider);
+    proxyPromise = startProxy(registryKey, resolved, parent, providers);
     proxyRegistry.set(registryKey, proxyPromise);
     void proxyPromise.catch(() => proxyRegistry.delete(registryKey));
   }
