@@ -381,6 +381,7 @@ export const enLocale: LocalePlugin = {
     "i18n.zoomOut": "Zoom out",
     "i18n.zoomIn": "Zoom in",
     "i18n.fitToWidth": "Fit to width",
+    "models.apiKeyApply": "Apply for an API Key",
     "models.discoveryFetching": "Importing models…",
     "models.discoveryFetch": "Import models…",
     "models.discoveryFilterPlaceholder": "Filter {count} models…",

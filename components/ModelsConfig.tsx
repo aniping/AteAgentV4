@@ -448,6 +448,16 @@ function ProviderDetail({ name, provider, onChange, onRename, onDelete, onAddMod
       <Field label="API Key">
         <SecretTextInput value={provider.apiKey ?? ""} onChange={(v) => set("apiKey", v || undefined)}
           placeholder="ENV_VAR_NAME, !shell-command, or literal key" mono />
+        {name === INTERNAL_PROVIDER_NAME && (
+          <a
+            href="https://ate-agent.rnd.huawei.com/console"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ alignSelf: "flex-start", color: "var(--accent)", fontSize: 11 }}
+          >
+            {t("models.apiKeyApply")} ↗
+          </a>
+        )}
         <span style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
           Prefix with <code style={{ fontFamily: "var(--font-mono)" }}>!</code> to run a shell command, or use an env var name
         </span>
